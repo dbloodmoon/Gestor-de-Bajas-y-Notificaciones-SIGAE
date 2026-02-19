@@ -86,11 +86,11 @@ class PrintRedirector:
 class SigaeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Gestor de Bajas y Notificaciones SIGAE v1.0.0")
+        self.root.title("Gestor de Bajas y Notificaciones SIGAE v1.0.1")
         self.root.state('zoomed')
         
         # --- CONTROL DE VERSIONES ---
-        self.VERSION_ACTUAL = "1.0.0"
+        self.VERSION_ACTUAL = "1.0.1"
         self.URL_VERSION = "https://raw.githubusercontent.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/refs/heads/main/version.txt"
         self.URL_DESCARGA = "https://github.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/releases/latest"
 
@@ -147,9 +147,13 @@ class SigaeApp:
             # Pasamos el contexto a la petición
             with urllib.request.urlopen(self.URL_VERSION, context=contexto_ssl) as response:
                 version_remota = response.read().decode('utf-8').strip()
+                
+            # Convertimos "1.0.1" en una tupla de números (1, 0, 1) para compararlos matemáticamente
+            tupla_remota = tuple(map(int, version_remota.split('.')))
+            tupla_actual = tuple(map(int, self.VERSION_ACTUAL.split('.')))
             
-            # Comparamos versiones (Lógica simple)
-            if version_remota != self.VERSION_ACTUAL:
+            # Comparamos versiones
+            if tupla_remota > tupla_actual:
                 print(f"¡Actualización disponible! ({version_remota})")
                 self.safe_ui_update(lambda: self.mostrar_aviso_update(version_remota))
             else:
