@@ -6,7 +6,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 import pandas as pd
 import time
-import config
 class SigaeBot:
     """Clase para automatizar procesos en el sistema SIGAE."""
     
@@ -24,7 +23,7 @@ class SigaeBot:
     BOTON_ENVIAR = (By.CSS_SELECTOR, "#w0 button[type='submit']")
     
     # URL principal (debe estar en config.py)
-    URL_PRINCIPAL = config.SIGAE_URL
+    URL_PRINCIPAL = "http://sigae.ucs.gob.ve"
 
     def __init__(self, driver):
         """Inicializa la instancia con el driver de Selenium."""
@@ -117,6 +116,12 @@ class SigaeBot:
             
             # Esperar a que cargue la página principal
             time.sleep(3)
+            
+            elementos_login = self.driver.find_elements(*self.INPUT_USUARIO)
+            
+            if len(elementos_login) > 0 and elementos_login[0].is_displayed():
+                print("    ✗ Credenciales incorrectas.")
+                return False
             
             print("    ✓ Sesión iniciada")
             return True
