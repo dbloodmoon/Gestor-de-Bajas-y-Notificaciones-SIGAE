@@ -8,6 +8,7 @@ import time
 import urllib.request
 import webbrowser
 import ssl
+import json
 from packaging import version
 from datetime import datetime
 from selenium import webdriver
@@ -16,20 +17,13 @@ from seguridad import cifrar_texto, descifrar_texto
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-# --- IMPORTACIONES LOCALES ---
-try:
-    import config
-except ImportError:
-    class ConfigDummy:
-        SIGAE_URL = "http://sigae.ucs.gob.ve"
-        CREDENTIALS = {"usuario": "", "clave": ""}
-    config = ConfigDummy()
+# --- CONSTANTES GLOBALES ---
+SIGAE_URL_GLOBAL = "http://sigae.ucs.gob.ve"
+ARCHIVO_RECUPERACION = "pendientes_recuperacion.xlsx"
+ARCHIVO_CONFIG = "config_sigae.json"
 
 from sigae_bot import SigaeBot
 from generar_notificacion import generar_notificacion_baja_word
-
-# Nombre del archivo de recuperación
-ARCHIVO_RECUPERACION = "pendientes_recuperacion.xlsx"
 
 class PrintRedirector:
     """Redirige print() al widget de texto de manera segura para hilos."""
@@ -50,7 +44,6 @@ class PrintRedirector:
 
     def write(self, string):
         if not string: return
-        # Verificamos si la ventana aún existe antes de intentar escribir
         try:
             if self.root.winfo_exists():
                 self.root.after(0, lambda: self._append_text(string))
@@ -65,13 +58,11 @@ class PrintRedirector:
 
     def _append_text(self, string):
         try:
-            # Doble chequeo para evitar errores al cerrar
             if not self.root.winfo_exists(): return
-            
             self.text_widget.configure(state='normal')
             tag = "NORMAL"
-            if "Error" in string or "Fallo" in string: tag = "ERROR"
-            elif "EXITO" in string or "✓" in string: tag = "INFO"
+            if "Error" in string or "Fallo" in string or "incorrectas" in string: tag = "ERROR"
+            elif "EXITO" in string or "✓" in string or "correctamente" in string: tag = "INFO"
             elif "Interrumpido" in string or "Detenido" in string: tag = "WARNING"
             
             self.text_widget.insert('end', string, tag)
@@ -94,19 +85,12 @@ class SigaeApp:
         self.URL_VERSION = "https://raw.githubusercontent.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/refs/heads/main/version.txt"
         self.URL_DESCARGA = "https://github.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/releases/latest"
 
-        # Bandera para saber si la app se está cerrando
         self.is_closing = False
-        
-        # Variable del driver para poder cerrarlo globalmente
         self.driver = None
-        
-        # --- Bandera de sesión ---
         self.sesion_valida = False
                
-        # Estilos visuales
         self._configurar_estilos()
         
-        # Variables de Control
         self.usuario_var = tk.StringVar()
         self.clave_var = tk.StringVar()
         self.archivo_excel_bot_var = tk.StringVar()
@@ -115,50 +99,67 @@ class SigaeApp:
         self.plantilla_bot_var = tk.StringVar(value="plantilla_bajas.docx")
         self.headless_var = tk.BooleanVar(value=False)
         
-        # Banderas de hilos
         self.stop_event = threading.Event()
         self.stop_word_event = threading.Event()
         
-        self.cargar_credenciales_config()
         self.crear_carpetas()
+        self.cargar_credenciales_config()
         
-        # Construcción de la UI
         self.crear_interfaz()
-
-        # Redirigir stdout
         sys.stdout = PrintRedirector(self.console_text, self.root)
-        
-        # Protocolo de cierre
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # Verificar actualizaciones al iniciar
         self.verificar_actualizacion()
 
+    # --- MANEJO DE CONFIGURACIÓN (JSON) ---
+    def cargar_credenciales_config(self):
+        """Carga los datos desde el archivo JSON si existe."""
+        if os.path.exists(ARCHIVO_CONFIG):
+            try:
+                with open(ARCHIVO_CONFIG, "r", encoding="utf-8") as f:
+                    datos = json.load(f)
+                    self.usuario_var.set(datos.get('usuario', ''))
+                    # Intentar descifrar la clave
+                    clave_cifrada = datos.get('clave', '')
+                    if clave_cifrada:
+                        self.clave_var.set(descifrar_texto(clave_cifrada))
+            except Exception as e:
+                print(f"Nota: No se pudo cargar config previa: {e}")
+
+    def guardar_credenciales_config(self):
+        """Guarda los datos en un archivo JSON independiente del .exe."""
+        usuario = self.usuario_var.get()
+        clave_plana = self.clave_var.get()
+        clave_cifrada = cifrar_texto(clave_plana)
+        
+        datos = {
+            "usuario": usuario,
+            "clave": clave_cifrada
+        }
+        try:
+            with open(ARCHIVO_CONFIG, "w", encoding="utf-8") as f:
+                json.dump(datos, f, indent=4)
+        except Exception as e:
+            self.safe_messagebox("error", f"Error guardando configuración local: {e}")
+
     def verificar_actualizacion(self):
-        """Consulta internet para ver si hay una versión nueva."""
         print("Buscando actualizaciones...")
         threading.Thread(target=self._thread_verificar_update).start()
 
     def _thread_verificar_update(self):
         try:
-            # Ignorar errores de SSL (en caso de certificados no confiables)
             contexto_ssl = ssl._create_unverified_context()
-            
-            # Pasamos el contexto a la petición
             with urllib.request.urlopen(self.URL_VERSION, context=contexto_ssl) as response:
                 version_remota = response.read().decode('utf-8').strip()
                 
-            # Convertimos "1.0.1" en una tupla de números (1, 0, 1) para compararlos matemáticamente
             tupla_remota = tuple(map(int, version_remota.split('.')))
             tupla_actual = tuple(map(int, self.VERSION_ACTUAL.split('.')))
             
-            # Comparamos versiones
             if tupla_remota > tupla_actual:
                 print(f"¡Actualización disponible! ({version_remota})")
                 self.safe_ui_update(lambda: self.mostrar_aviso_update(version_remota))
             else:
                 print("El sistema está actualizado.")
-                
         except Exception as e:
             print(f"No se pudo verificar actualizaciones: {e}")
 
@@ -168,7 +169,7 @@ class SigaeApp:
                                f"Tienes la versión {self.VERSION_ACTUAL}.\n\n"
                                "¿Deseas ir a la página de descarga ahora?"):
             webbrowser.open(self.URL_DESCARGA)
-            self.on_closing() # Opcional: Cerrar la app para que actualicen
+            self.on_closing() 
 
     def _configurar_estilos(self):
         style = ttk.Style()
@@ -186,34 +187,6 @@ class SigaeApp:
         style.configure('TFrame', background=bg_color)
         style.configure('TLabelframe', background=bg_color)
         style.configure('TLabelframe.Label', font=('Segoe UI', 10, 'bold'), background=bg_color, foreground="#555")
-
-    def cargar_credenciales_config(self):
-        try:
-            user = config.CREDENTIALS.get('usuario', '')
-            pwd_guardada = config.CREDENTIALS.get('clave', '')
-            self.usuario_var.set(user)
-            self.clave_var.set(descifrar_texto(pwd_guardada))
-        except Exception:
-            pass
-
-    def guardar_credenciales_config(self):
-        usuario = self.usuario_var.get()
-        clave_plana = self.clave_var.get()
-        clave_cifrada = cifrar_texto(clave_plana) 
-        url = getattr(config, 'SIGAE_URL', "http://sigae.ucs.gob.ve")
-        
-        contenido = f"""SIGAE_URL = "{url}"
-CREDENTIALS = {{
-    "usuario": {repr(usuario)},
-    "clave": {repr(clave_cifrada)}
-}}
-"""
-        try:
-            with open("config.py", "w", encoding="utf-8") as f:
-                f.write(contenido)
-            config.CREDENTIALS = {"usuario": usuario, "clave": clave_cifrada}
-        except Exception as e:
-            self.safe_messagebox("error", f"Error guardando config: {e}")
 
     def crear_carpetas(self):
         for c in ["Reportes", "Notificaciones"]:
@@ -242,13 +215,11 @@ CREDENTIALS = {{
             
             if self.driver:
                 try:
-                    print("Cerrando navegador...")
                     self.driver.quit()
                 except:
                     pass
             self.root.after(1000, self.root.destroy)
 
-    # --- INTERFAZ ---
     def crear_interfaz(self):
         header_frame = tk.Frame(self.root, bg="#0078d7", height=60)
         header_frame.pack(fill='x')
@@ -258,23 +229,19 @@ CREDENTIALS = {{
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(expand=True, fill='both', padx=20, pady=15)
 
-        # Tab 0: Login
         self.tab_login = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_login, text=" 🔐 Acceso ")
         self._construir_login(self.tab_login)
 
-        # Tab 1: Bot (Inicialmente deshabilitado)
         self.tab_bot = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_bot, text=" 🚀 Ejecutar Bot de Bajas ")
         self._construir_bot(self.tab_bot)
 
-        # Tab 2: Word (Inicialmente deshabilitado)
         self.tab_word = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_word, text=" 📄 Generador de Bajas Word ")
         self._construir_word(self.tab_word)
 
-        # --- Bloquear pestañas al inicio ---
-        self.notebook.tab(1, state='disabled') # Bloquear Bot
+        self.notebook.tab(1, state='disabled') 
 
         frame_console = ttk.LabelFrame(self.root, text="Registro de Eventos (Log)", padding=10)
         frame_console.pack(fill='both', expand=False, padx=20, pady=(0, 20))
@@ -363,7 +330,6 @@ CREDENTIALS = {{
         path = filedialog.askopenfilename(filetypes=[("Archivos", tipo)])
         if path: var.set(path)
 
-    # --- LOGIN ---
     def verificar_login(self):
         self.btn_login.config(state='disabled')
         self.lbl_status.config(text="⏳ Conectando con SIGAE...", foreground="black")
@@ -375,7 +341,7 @@ CREDENTIALS = {{
             ops = Options(); ops.add_argument("--headless")
             servicio = Service(ChromeDriverManager().install())
             driver_login = webdriver.Chrome(service=servicio, options=ops)
-            driver_login.get(config.SIGAE_URL)
+            driver_login.get(SIGAE_URL_GLOBAL)
             bot = SigaeBot(driver_login)
             if bot.login(self.usuario_var.get(), self.clave_var.get()):
                 self.safe_ui_update(self.login_exitoso)
@@ -390,22 +356,16 @@ CREDENTIALS = {{
 
     def login_exitoso(self):
         self.guardar_credenciales_config()
-        # --- Habilitar pestañas y cambiar bandera ---
         self.sesion_valida = True
         self.lbl_status.config(text="✅ Conexión Exitosa", foreground="green")
         
-        # Habilitar pestañas
         self.notebook.tab(1, state='normal')
         self.notebook.tab(2, state='normal')
-        
-        # Mover automáticamente a la pestaña del Bot
         self.notebook.select(self.tab_bot)
         
         self.safe_messagebox("info", "Acceso Concedido", "Bienvenido. Las funciones han sido desbloqueadas.")
 
-    # --- WORD ---
     def ejecutar_word(self):
-        # Doble verificación de seguridad
         if not self.sesion_valida:
             self.safe_messagebox("error", "Acceso Denegado", "Debe iniciar sesión primero.")
             return
@@ -475,12 +435,9 @@ CREDENTIALS = {{
             self.safe_ui_update(lambda: self.btn_run_word.config(state='normal'))
             self.safe_ui_update(lambda: self.btn_stop_word.config(state='disabled'))
 
-    # --- BOT ---
     def ejecutar_bot(self):
-        # --- Verificación de sesión ---
         if not self.sesion_valida:
             self.safe_messagebox("error", "Acceso Denegado", "Debe iniciar sesión correctamente antes de ejecutar el bot.")
-            # Regresar a la pestaña de login por si acaso
             self.notebook.select(self.tab_login)
             return
 
@@ -551,7 +508,7 @@ CREDENTIALS = {{
             self.driver = webdriver.Chrome(service=servicio, options=ops)
             bot = SigaeBot(self.driver)
             
-            self.driver.get(config.SIGAE_URL)
+            self.driver.get(SIGAE_URL_GLOBAL)
             if not bot.login(self.usuario_var.get(), self.clave_var.get()):
                 print("Error de Login. Abortando.")
                 return
