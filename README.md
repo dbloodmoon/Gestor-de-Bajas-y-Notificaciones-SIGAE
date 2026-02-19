@@ -9,7 +9,8 @@ Herramienta de automatización de procesos administrativos desarrollada en Pytho
 ## 📋 Características Principales
 
 * **Automatización Web (RPA):** Bot inteligente que navega, busca estudiantes y procesa formularios en el sistema SIGAE usando Selenium WebDriver.
-* **Interfaz Gráfica (GUI):** Aplicación de escritorio amigable construida con Tkinter, con pestañas de navegación y consola de logs en tiempo real.
+* **Gestión Automática de Drivers:** Integra `webdriver-manager`, por lo que **no es necesario descargar ni configurar ChromeDriver manualmente**; el sistema lo actualiza solo.
+* **Interfaz Gráfica (GUI):** Aplicación de escritorio amigable construida con Tkinter, con pestañas de navegación, validación de sesión y consola de logs.
 * **Seguridad:** Sistema de cifrado de credenciales locales utilizando `cryptography` (Fernet) para proteger el acceso del usuario.
 * **Procesamiento Masivo:** Lectura de datos desde Excel (`pandas`) con capacidad de procesar cientos de registros automáticamente.
 * **Generación de Documentos:** Creación automática de cartas de notificación en Word (`python-docx`) rellenando plantillas predefinidas.
@@ -18,14 +19,15 @@ Herramienta de automatización de procesos administrativos desarrollada en Pytho
 ## 🛠️ Tecnologías Utilizadas
 
 * **Python 3**
-* **Selenium:** Para la automatización del navegador.
-* **Pandas & OpenPyXL:** Para manipulación de datos Excel.
-* **Tkinter:** Para la interfaz gráfica de usuario.
-* **Python-Docx:** Para la generación de reportes.
-* **Cryptography:** Para el manejo seguro de contraseñas.
-* **Threading:** Para evitar el congelamiento de la interfaz durante procesos largos.
+* **Selenium & Webdriver-Manager**
+* **Pandas & OpenPyXL**
+* **Tkinter**
+* **Python-Docx**
+* **Cryptography**
 
-## 🚀 Instalación y Uso
+## 🚀 Instalación y Uso (Código Fuente)
+
+Si deseas ejecutar el script desde el código fuente en lugar del `.exe`:
 
 1.  **Clonar el repositorio:**
     ```bash
@@ -37,20 +39,20 @@ Herramienta de automatización de procesos administrativos desarrollada en Pytho
     ```bash
     pip install -r requirements.txt
     ```
+    *(Asegúrate de que `webdriver-manager` esté en tu requirements.txt)*
 
-3.  **Configuración:**
-    * Asegúrate de tener `chromedriver.exe` en la carpeta raíz (o usa `webdriver-manager`).
-    * Debes tener el archivo `plantilla_bajas.docx` en la carpeta.
+3.  **Requisitos:**
+    * Solo necesitas tener el archivo `plantilla_bajas.docx` en la carpeta raíz.
+    * No necesitas descargar el driver de Chrome, el script lo hará automáticamente al iniciar.
 
 4.  **Ejecución:**
     ```bash
     python gui_app.py
     ```
 
-## ⚠️ Nota Legal y Responsabilidad
+## 📦 Compilación a Ejecutable (.exe)
 
-Esta herramienta fue desarrollada con fines de optimización administrativa y educativa. El uso de bots en plataformas de terceros debe realizarse bajo la supervisión y autorización correspondiente. El autor no se hace responsable por el mal uso de la herramienta.
+Para generar un ejecutable portable que no requiera instalación de Python:
 
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
+```bash
+pyinstaller --noconfirm --onefile --windowed --name "GestorSIGAE" gui_app.py
