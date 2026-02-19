@@ -7,6 +7,7 @@ import pandas as pd
 import time
 import urllib.request
 import webbrowser
+import ssl
 from packaging import version
 from datetime import datetime
 from selenium import webdriver
@@ -140,8 +141,11 @@ class SigaeApp:
 
     def _thread_verificar_update(self):
         try:
-            # Leemos el archivo version.txt de internet
-            with urllib.request.urlopen(self.URL_VERSION) as response:
+            # Ignorar errores de SSL (en caso de certificados no confiables)
+            contexto_ssl = ssl._create_unverified_context()
+            
+            # Pasamos el contexto a la petición
+            with urllib.request.urlopen(self.URL_VERSION, context=contexto_ssl) as response:
                 version_remota = response.read().decode('utf-8').strip()
             
             # Comparamos versiones (Lógica simple)
