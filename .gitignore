@@ -1,27 +1,22 @@
+# Entorno virtual
+Lib/
+Scripts/
+pyvenv.cfg
+
+# Caché de Python
+__pycache__/
+*.pyc
+
+#Carpetas de salida
+Notificaciones/
+Reportes/
+Pendientes/
+
 # Archivos de configuración
 config.py
-secret.key
-*.key
-*.cfg
+config_sigae.jso
 
-# Archivos de logs
-*.log
-registro_proceso.log
-
-# Carpetas de entorno virtual
-venv/
-env/
-__pycache__/
-Lib/
-
-# Carpetas generadas por el bot
-Reportes/
-Notificaciones/
-build/
-dist/
-*.spec
-
-# Archivos temporales de Excel/Word
-~$*.xlsx
-~$*.docx
-*.tmp
+# Archivos de datos
+NOTIFICACIONES BAJAS.xlsx
+listado_estudiantes.xlsx
+pendientes_recuperacion.xlsx
