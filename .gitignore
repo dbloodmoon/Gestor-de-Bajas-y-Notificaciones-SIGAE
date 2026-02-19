@@ -1,0 +1,27 @@
+# Archivos de configuración
+config.py
+secret.key
+*.key
+*.cfg
+
+# Archivos de logs
+*.log
+registro_proceso.log
+
+# Carpetas de entorno virtual
+venv/
+env/
+__pycache__/
+Lib/
+
+# Carpetas generadas por el bot
+Reportes/
+Notificaciones/
+build/
+dist/
+*.spec
+
+# Archivos temporales de Excel/Word
+~$*.xlsx
+~$*.docx
+*.tmp
