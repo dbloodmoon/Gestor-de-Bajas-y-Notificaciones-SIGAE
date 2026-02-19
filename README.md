@@ -1,4 +1,4 @@
-# SIGAE Automation Tool 🚀
+# Gestor de Bajas y Notificaciones SIGAE 🚀
 
 Herramienta de automatización de procesos administrativos desarrollada en Python. Este software permite gestionar masivamente la baja de estudiantes en la plataforma SIGAE (Sistema de Gestión Académica) y generar automáticamente los soportes documentales en Word.
 
