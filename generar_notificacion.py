@@ -44,7 +44,7 @@ def generar_notificacion_baja_word(datos, plantilla_path="plantilla_bajas.docx")
             "{{EJE}}": str(datos.get('EJE', '')).upper(),
             "{{ASIC}}": str(datos.get('ASIC', '')).upper(),
             "{{TRAYECTO}}": str(datos.get('AÑO', '')).upper(),
-            "{{CAUSAL}}": str(datos.get('motivo', '')).upper(),
+            "{{CAUSAL}}": str(datos.get('CAUSAL', '')).upper(),
             "{{FECHA_TRAMITE}}": limpiar_fecha_excel(datos.get('FECHA TRAMITE')),
             "{{PNF}}": str(datos.get('PNF', '')).upper(),
             "{{CABES}}": str(datos.get('CABES', '')).upper(),
@@ -84,10 +84,10 @@ def generar_notificacion_baja_word(datos, plantilla_path="plantilla_bajas.docx")
                         reemplazar_texto_preservando_formato(p)
 
         # --- SECCIÓN DE NOMBRE DE ARCHIVO ---
+        fecha_hoy = datetime.now().strftime("%d-%m-%Y")
         
         # 1. Obtener Nombre y Apellido limpios
         raw_nombre = str(datos.get('NOMBRES', 'Estudiante')).strip().upper()
-        # Intentar obtener Apellido 1, si falla, intentar APELLIDOS
         raw_apellido = str(datos.get('APELLIDO 1', '')).strip().upper()
         if not raw_apellido:
             raw_apellido = str(datos.get('APELLIDOS', '')).strip().upper()
@@ -97,15 +97,15 @@ def generar_notificacion_baja_word(datos, plantilla_path="plantilla_bajas.docx")
         if not raw_cedula or raw_cedula.lower() == 'nan':
             raw_cedula = str(datos.get('cedula', 'SN')).strip()
 
-        # 3. Limpieza de caracteres prohibidos en nombres de archivo (Windows)
+        # 3. Limpieza de caracteres prohibidos en nombres de archivo
         caracteres_prohibidos = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
         for char in caracteres_prohibidos:
             raw_nombre = raw_nombre.replace(char, '')
             raw_apellido = raw_apellido.replace(char, '')
             raw_cedula = raw_cedula.replace(char, '')
 
-        nombre_salida = f"Notificacion {raw_nombre} {raw_apellido} {raw_cedula}.docx"
-
+        # 4. Construir el nombre final INCLUYENDO la fecha de hoy
+        nombre_salida = f"Notificacion_{raw_nombre}_{raw_apellido}_{raw_cedula}_{fecha_hoy}.docx"
         # --- FIN SECCIÓN MODIFICADA ---
 
         if not os.path.exists("Notificaciones"):
@@ -116,4 +116,4 @@ def generar_notificacion_baja_word(datos, plantilla_path="plantilla_bajas.docx")
         print(f"   Word generado: {ruta_salida}")
 
     except Exception as e:
-        print(f"   ⚠ Error generando Word para {datos.get('cedula')}: {e}")
+        print(f"   ⚠ Error generando Word: {e}")
