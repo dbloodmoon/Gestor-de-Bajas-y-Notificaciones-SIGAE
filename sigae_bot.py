@@ -20,7 +20,7 @@ class SigaeBot:
     OPCION_SOLICITAR_BAJA = (By.CSS_SELECTOR, 'a[href*="solicitar-baja"]')
     SELECT_MOTIVO = (By.ID, "alumnobajaslicencias-id_estatus_academico")
     TEXTAREA_DESCRIPCION = (By.ID, "alumnobajaslicencias-descripcion_solicitud")
-    BOTON_ENVIAR = (By.CSS_SELECTOR, "#w0 button[type='submit']")
+    BOTON_ENVIAR = (By.ID, "button-submit-inscripcion")
     
     # URL principal (debe estar en config.py)
     URL_PRINCIPAL = "http://sigae.ucs.gob.ve"
@@ -57,6 +57,16 @@ class SigaeBot:
         except TimeoutException:
             print(f"    ⏱️  Timeout esperando: {mensaje_error}")
             return None
+        
+    def esperar_presencia_elemento(self, localizador, timeout=15, mensaje_error="Elemento no encontrado"):
+        """Espera a que un elemento exista en el DOM, sin importar si es visible o no."""
+        try:
+            return WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located(localizador)
+            )
+        except TimeoutException:
+            print(f"    ⏱️  Timeout esperando presencia: {mensaje_error}")
+            return None
 
     def escribir_en_campo(self, localizador, texto, timeout=10):
         """Escribe texto en un campo de formulario visible."""
@@ -85,6 +95,26 @@ class SigaeBot:
         except Exception as e:
             print(f"    ⚠ Error al hacer click en {localizador}: {e}")
             return False
+        
+    def esperar_url_contenga(self, texto_url, timeout=15):
+        """Espera dinámicamente hasta que la URL cambie al texto esperado."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.url_contains(texto_url)
+            )
+            return True
+        except TimeoutException:
+            return False
+
+    def esperar_desaparicion(self, localizador, timeout=10):
+        """Espera dinámicamente a que un elemento (ej. pantalla de carga) desaparezca."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.invisibility_of_element_located(localizador)
+            )
+            return True
+        except TimeoutException:
+            return False
 
     def obtener_id_causal(self, texto_causal):
         """Convierte texto descriptivo al ID numérico usado por el sistema."""
@@ -92,7 +122,32 @@ class SigaeBot:
             return "5"
         
         texto_normalizado = str(texto_causal).strip().upper()
-        return self.MAPEO_CAUSALES.get(texto_normalizado, "5")
+        
+        # Intentar coincidencia exacta primero con el diccionario original
+        id_exacto = self.MAPEO_CAUSALES.get(texto_normalizado)
+        if id_exacto:
+            return id_exacto
+        
+        # Búsqueda inteligente por palabras clave si escribieron mal en el Excel
+        if "DESERCI" in texto_normalizado: 
+            return "6"
+        if "INASISTENCIA" in texto_normalizado: 
+            return "2"
+        if "INSUFICIENCIA" in texto_normalizado: 
+            return "3"
+        if "DISCIPLINARIA" in texto_normalizado: 
+            return "4"
+        if "DEFINITIVA" in texto_normalizado: 
+            return "9"
+        if "FALLECIMIENTO" in texto_normalizado: 
+            return "7"
+        if "REQUISITO" in texto_normalizado: 
+            return "8"
+        if "PERSONAL" in texto_normalizado or "VOLUNTARIA" in texto_normalizado: 
+            return "5"
+        
+        print(f"    ⚠ Causal no reconocida en Excel: '{texto_causal}'. Usando por defecto (5).")
+        return "5"
 
     # --- AUTENTICACIÓN ---
     def login(self, usuario, clave):
@@ -114,11 +169,16 @@ class SigaeBot:
             campo_clave = self.driver.find_element(*self.INPUT_CLAVE)
             campo_clave.send_keys(Keys.RETURN)
             
-            # Esperar a que cargue la página principal
-            time.sleep(3)
-            
             elementos_login = self.driver.find_elements(*self.INPUT_USUARIO)
             
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.staleness_of(campo_clave)
+                )
+            except TimeoutException:
+                pass # Si no se vuelve obsoleto, revisamos si hay error visible
+            
+            elementos_login = self.driver.find_elements(*self.INPUT_USUARIO)
             if len(elementos_login) > 0 and elementos_login[0].is_displayed():
                 print("    ✗ Credenciales incorrectas.")
                 return False
@@ -132,51 +192,29 @@ class SigaeBot:
 
     # --- NAVEGACIÓN ---
     def navegar_a_listado_pnf(self):
-        """Navega a la lista de estudiantes PNF usando clicks en el menú."""
-        print("    ↻ Navegando al listado PNF por menú...")
-        
+        """Navega directamente a la lista de estudiantes PNF mediante URL."""
+        print("    ↻ Navegando directamente al listado PNF...")
         try:
-            # PRIMER PASO: Ir a la página principal
-            print("    ↻ Yendo a la página principal...")
-            self.driver.get(self.URL_PRINCIPAL)
-            time.sleep(3)  # Esperar a que cargue completamente
+            # Construir la URL exacta usando la base y la ruta que vimos en el HTML
+            url_lista_pnf = f"{self.URL_PRINCIPAL}/index.php?r=estudiante%2Falumno-pnf"
             
-            # SEGUNDO PASO: Hacer click en el menú Estudiantes
-            print("    ↻ Abriendo menú Estudiantes...")
-            if not self.hacer_click(self.MENU_ESTUDIANTE, usar_javascript=True):
-                # Intentar de forma tradicional
-                try:
-                    menu_estudiante = self.driver.find_element(*self.MENU_ESTUDIANTE)
-                    menu_estudiante.click()
-                except:
-                    print("    ✗ No se pudo abrir menú Estudiantes")
-                    return False
+            # Navegar directo, sin hacer clics en menús
+            self.driver.get(url_lista_pnf)
             
-            time.sleep(1.5)  # Esperar a que se despliegue el submenú
-            
-            # TERCER PASO: Hacer click en el submenú "Lista PNF"
-            print("    ↻ Seleccionando Lista PNF...")
-            if not self.hacer_click(self.SUBMENU_LISTA_PNF, usar_javascript=True):
-                # Intentar de forma tradicional
-                try:
-                    submenu_pnf = self.driver.find_element(*self.SUBMENU_LISTA_PNF)
-                    submenu_pnf.click()
-                except:
-                    print("    ✗ No se pudo seleccionar Lista PNF")
-                    return False
-            
-            # Esperar a que cargue la página del listado
-            time.sleep(3)
-            
-            print("    ✓ Listado PNF cargado exitosamente")
-            return True
+            # Verificar que llegamos correctamente
+            if self.esperar_url_contenga("alumno-pnf"):
+                print("    ✓ Listado PNF cargado instantáneamente")
+                return True
+            else:
+                print("    ✗ Error al cargar la URL directa del listado")
+                return False
                 
         except Exception as e:
             print(f"Error al navegar al listado PNF: {e}")
             return False
 
     # --- BÚSQUEDA ---
-    def buscar_estudiante(self, cedula, nacionalidad="V"):
+    def buscar_estudiante(self, cedula, nacionalidad=""):
         """Busca un estudiante por cédula en el sistema."""
         try:
             print(f"    🔍 Buscando estudiante {cedula}...")
@@ -261,8 +299,9 @@ class SigaeBot:
             xpath_fila = f"//tr[td[contains(text(), '{cedula}')]]"
             
             # Esperar a que la fila sea visible
-            fila_estudiante = self.esperar_elemento((By.XPATH, xpath_fila), 
-                                                   mensaje_error=f"Fila del estudiante {cedula}")
+            fila_estudiante = self.esperar_elemento((By.XPATH, xpath_fila),
+                                                    timeout=1,
+                                                    mensaje_error=f"Fila del estudiante {cedula}")
             if not fila_estudiante:
                 print(f"    ✗ No se encontró la fila para {cedula}")
                 return False
@@ -326,51 +365,52 @@ class SigaeBot:
         try:
             print(f"    ✍️  Procesando formulario...")
             
-            # Esperar a que el formulario se cargue completamente
             print("    ↻ Esperando carga del formulario...")
-            time.sleep(2)
             
-            # Esperar a que el campo de motivo esté disponible (Select2 puede tardar en cargar)
-            if not self.esperar_elemento(self.SELECT_MOTIVO, timeout=10, 
+            if not self.esperar_presencia_elemento(self.SELECT_MOTIVO, timeout=5, 
                                          mensaje_error="Campo de motivo en formulario"):
                 print("    ⚠ Formulario no se cargó completamente, pero continuamos...")
-            
-            # IMPORTANTE: Dar tiempo extra para que Select2 se inicialice completamente
-            time.sleep(2)
-            
+                        
             # Completar los campos del formulario en orden
             print("    ↻ Seleccionando motivo...")
             self._seleccionar_motivo_select2(causal_texto)
-            time.sleep(1.5)  # Esperar a que Select2 actualice
+            time.sleep(0.5)  
             
             print("    ↻ Estableciendo fecha...")
             self._establecer_fecha_actual()
-            time.sleep(1)
+            time.sleep(0.5)
             
             print("    ↻ Escribiendo descripción...")
             self._escribir_descripcion(causal_texto)
-            time.sleep(1)
+            time.sleep(0.5)
             
             # Enviar el formulario
             print("    ↻ Enviando formulario...")
+            
+            # Guardamos la URL actual antes de hacer clic
+            url_formulario = self.driver.current_url
+            
             if self._enviar_formulario():
                 print(f"    ✓ Formulario enviado: {causal_texto}")
                 
-                # DESPUÉS DE ENVIAR EL FORMULARIO:
-                # 1. Esperar a que el sistema procese
-                print("    ⏳ Esperando procesamiento del sistema...")
-                time.sleep(4)
+                print("    ⏳ Verificando redirección del sistema...")
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        EC.url_changes(url_formulario)
+                    )
+                except TimeoutException:
+                    print("    ⚠ La URL no cambió rápido, pero forzaremos la salida.")
+
+                print("    ↻ Evadiendo pop-up visual y volviendo al inicio...")
                 
-                # 2. Ir a la página principal para reiniciar el proceso
-                print("    ↻ Volviendo a página principal...")
-                self.driver.get(self.URL_PRINCIPAL)
-                time.sleep(3)
-                
+                url_lista_pnf = f"{self.URL_PRINCIPAL}/index.php?r=estudiante%2Falumno-pnf"
+                self.driver.get(url_lista_pnf)
+
                 return True
             else:
                 print(f"    ✗ Problema al enviar formulario")
                 return False
-            
+
         except Exception as error:
             print(f"Error al procesar formulario: {error}")
             return False
