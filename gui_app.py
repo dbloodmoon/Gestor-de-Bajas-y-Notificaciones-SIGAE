@@ -77,11 +77,11 @@ class PrintRedirector:
 class SigaeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Gestor de Bajas y Notificaciones SIGAE v1.0.1")
+        self.root.title("Gestor de Bajas y Notificaciones SIGAE v1.0.3")
         self.root.state('zoomed')
         
         # --- CONTROL DE VERSIONES ---
-        self.VERSION_ACTUAL = "1.0.1"
+        self.VERSION_ACTUAL = "1.0.3"
         self.URL_VERSION = "https://raw.githubusercontent.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/refs/heads/main/version.txt"
         self.URL_DESCARGA = "https://github.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/releases/latest"
 
@@ -530,7 +530,7 @@ class SigaeApp:
                             motivo = row.get('CAUSAL', 'Desconocido')
                             if bot.procesar_formulario_baja(motivo):
                                 exito = True
-                                nota = "Baja OK"
+                                nota = "Procesado correctamente"
                                 if plantilla and os.path.exists(plantilla):
                                     try:
                                         d_word = row.to_dict()
@@ -539,23 +539,26 @@ class SigaeApp:
                                         generar_notificacion_baja_word(d_word, plantilla)
                                     except Exception as ew:
                                         print(f"Error Word: {ew}")
+                                        nota = "Baja registrada en SIGAE, pero falló al generar el Word."
                             else:
-                                nota = "Fallo Formulario"
+                                nota = "No se pudo completar el formulario (Verifique si la causal es válida)."
                         else:
-                            nota = "Fallo Menú"
+                            nota = "El estudiante existe, pero no se pudo hacer click en la opción de baja."
                     else:
-                        nota = "No encontrado"
+                        nota = "Estudiante no encontrado. Verifique la cédula en SIGAE."
                 except Exception as e_proc:
                     nota = f"Error Critico: {str(e_proc)[:50]}"
                     print(nota)
+                    
+                resultado_fila = row.to_dict()
 
-                resultados.append({
-                    "CEDULA": cedula, 
-                    "ESTADO": "EXITO" if exito else "FALLO", 
-                    "NOTA": nota,
-                    "FECHA": datetime.now().strftime("%H:%M:%S")
+                resultado_fila.update({
+                    "ESTADO_BOT": "EXITO" if exito else "FALLO", 
+                    "NOTA_SISTEMA": nota,
+                    "FECHA_PROCESO": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 })
-                
+
+                resultados.append(resultado_fila)
                 cedulas_procesadas.append(cedula)
                 time.sleep(1)
 
