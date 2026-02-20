@@ -366,10 +366,6 @@ class SigaeApp:
         self.safe_messagebox("info", "Acceso Concedido", "Bienvenido. Las funciones han sido desbloqueadas.")
 
     def ejecutar_word(self):
-        if not self.sesion_valida:
-            self.safe_messagebox("error", "Acceso Denegado", "Debe iniciar sesión primero.")
-            return
-
         self.stop_word_event.clear()
         self.btn_run_word.config(state='disabled')
         self.btn_stop_word.config(state='normal')
@@ -397,7 +393,7 @@ class SigaeApp:
 
         try:
             print("=== INICIANDO GENERADOR WORD ===")
-            df = pd.read_excel(archivo)
+            df = pd.read_excel(archivo, dtype={'CÉDULA': str})
             df.columns = df.columns.str.strip()
             total = len(df)
             print(f"Registros encontrados: {total}")
@@ -412,7 +408,16 @@ class SigaeApp:
                 try:
                     datos = row.to_dict()
                     cedula = str(datos.get('CÉDULA', 'SN'))
+                    
+                    if cedula.endswith('.0'):
+                        cedula = cedula[:-2]
+                    
                     datos['cedula'] = cedula
+                    
+                    causal = str(datos.get('CAUSAL', ''))
+                    if causal.lower() == 'nan': causal = 'Baja'
+                    datos['causal'] = causal
+                    datos['CAUSAL'] = causal
                     
                     print(f"[{i+1}/{total}] Generando doc para: {cedula}...")
                     generar_notificacion_baja_word(datos, plantilla)
@@ -534,8 +539,16 @@ class SigaeApp:
                                 if plantilla and os.path.exists(plantilla):
                                     try:
                                         d_word = row.to_dict()
-                                        d_word['cedula'] = cedula
-                                        d_word['fecha'] = datetime.now().strftime("%d/%m/%Y")
+                                        cedula_limpia = cedula
+                                        if cedula_limpia.endswith('.0'):
+                                            cedula_limpia = cedula_limpia[:-2]
+                                            
+                                        d_word['cedula'] = cedula_limpia
+                                        d_word['fecha'] = str(row.get('FECHA', '')).strip()
+                                        
+                                        d_word['causal'] = motivo
+                                        d_word['CAUSAL'] = motivo
+                                        
                                         generar_notificacion_baja_word(d_word, plantilla)
                                     except Exception as ew:
                                         print(f"Error Word: {ew}")
@@ -543,7 +556,7 @@ class SigaeApp:
                             else:
                                 nota = "No se pudo completar el formulario (Verifique si la causal es válida)."
                         else:
-                            nota = "El estudiante existe, pero no se pudo hacer click en la opción de baja."
+                            nota = "Estudiante no encontrado. Verifique la cédula en SIGAE."
                     else:
                         nota = "Estudiante no encontrado. Verifique la cédula en SIGAE."
                 except Exception as e_proc:
@@ -551,6 +564,13 @@ class SigaeApp:
                     print(nota)
                     
                 resultado_fila = row.to_dict()
+                
+                for columna, valor in resultado_fila.items():
+                    if pd.notna(valor):
+                        if isinstance(valor, (datetime, pd.Timestamp)):
+                            resultado_fila[columna] = valor.strftime("%d/%m/%Y")
+                        elif str(valor).endswith(" 00:00:00"):
+                            resultado_fila[columna] = str(valor).replace(" 00:00:00", "")
 
                 resultado_fila.update({
                     "ESTADO_BOT": "EXITO" if exito else "FALLO", 
