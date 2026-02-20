@@ -36,6 +36,12 @@ def generar_notificacion_baja_word(datos, plantilla_path="plantilla_bajas.docx")
     try:
         doc = Document(plantilla_path)
         
+        raw_trayecto = str(datos.get('AÑO', '')).strip().upper()
+        if raw_trayecto == 'NAN' or not raw_trayecto:
+            texto_trayecto = ""
+        else:
+            texto_trayecto = f"de {raw_trayecto} "
+        
         # Diccionario de reemplazos
         reemplazos = {
             "{{NOMBRE}}": str(datos.get('NOMBRES', '')).upper(),
@@ -43,7 +49,7 @@ def generar_notificacion_baja_word(datos, plantilla_path="plantilla_bajas.docx")
             "{{CEDULA}}": str(datos.get('CÉDULA', '')),
             "{{EJE}}": str(datos.get('EJE', '')).upper(),
             "{{ASIC}}": str(datos.get('ASIC', '')).upper(),
-            "{{TRAYECTO}}": str(datos.get('AÑO', '')).upper(),
+            "{{TRAYECTO}}": texto_trayecto,
             "{{CAUSAL}}": str(datos.get('CAUSAL', '')).upper(),
             "{{FECHA_TRAMITE}}": limpiar_fecha_excel(datos.get('FECHA TRAMITE')),
             "{{PNF}}": str(datos.get('PNF', '')).upper(),
