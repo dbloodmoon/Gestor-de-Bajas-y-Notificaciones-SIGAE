@@ -39,7 +39,6 @@ Si deseas ejecutar el script desde el código fuente en lugar del `.exe`:
     ```bash
     pip install -r requirements.txt
     ```
-    *(Asegúrate de que `webdriver-manager` esté en tu requirements.txt)*
 
 3.  **Requisitos:**
     * Solo necesitas tener el archivo `plantilla_bajas.docx` en la carpeta raíz.
