@@ -30,6 +30,7 @@ class SigaeBot:
         self.driver = driver
         self.wait = WebDriverWait(self.driver, 15)
         self._inicializar_mapeo_causales()
+        self.tipo_prog = ""
 
     def _inicializar_mapeo_causales(self):
         """Inicializa el diccionario de mapeo de causales de baja."""
@@ -191,18 +192,21 @@ class SigaeBot:
             return False
 
     # --- NAVEGACIÓN ---
-    def navegar_a_listado_pnf(self):
+    def navegar_a_listado(self, tipo_programa="pnf"):
         """Navega directamente a la lista de estudiantes PNF mediante URL."""
+        tipo = str(tipo_programa).strip().lower()
+        self.tipo_prog = tipo
+
         print("    ↻ Navegando directamente al listado PNF...")
         try:
             # Construir la URL exacta usando la base y la ruta que vimos en el HTML
-            url_lista_pnf = f"{self.URL_PRINCIPAL}/index.php?r=estudiante%2Falumno-pnf"
+            url_lista = f"{self.URL_PRINCIPAL}/index.php?r=estudiante%2Falumno-{tipo}"
             
             # Navegar directo, sin hacer clics en menús
-            self.driver.get(url_lista_pnf)
+            self.driver.get(url_lista)
             
             # Verificar que llegamos correctamente
-            if self.esperar_url_contenga("alumno-pnf"):
+            if self.esperar_url_contenga(f"alumno-{tipo}"):
                 print("    ✓ Listado PNF cargado instantáneamente")
                 return True
             else:
@@ -214,16 +218,17 @@ class SigaeBot:
             return False
 
     # --- BÚSQUEDA ---
-    def buscar_estudiante(self, cedula, nacionalidad=""):
+    def buscar_estudiante(self, cedula, tipo_programa="pnf", nacionalidad=""):
         """Busca un estudiante por cédula en el sistema."""
+        tipo = str(tipo_programa).strip().lower()
+
         try:
             print(f"    🔍 Buscando estudiante {cedula}...")
             
-            # Verificar si ya estamos en el listado PNF
-            # Si no estamos, navegar al listado
-            if "alumno-pnf" not in self.driver.current_url:
+            # Verificar si ya estamos en el listado correcto
+            if f"alumno-{tipo}" not in self.driver.current_url:
                 print("    ↻ No estamos en listado PNF, navegando...")
-                if not self.navegar_a_listado_pnf():
+                if not self.navegar_a_listado(tipo): 
                     print("    ✗ No se pudo navegar al listado PNF")
                     return False
             
@@ -305,6 +310,19 @@ class SigaeBot:
             if not fila_estudiante:
                 print(f"    ✗ No se encontró la fila para {cedula}")
                 return False
+
+            try:
+                opcion_baja_directa = fila_estudiante.find_element(By.CSS_SELECTOR, 'a[href*="solicitar-baja"]')
+                if opcion_baja_directa.is_displayed():
+                    print("    ↻ Clic en botón directo de baja (Sin menú)...")
+                    self.driver.execute_script("arguments[0].click();", opcion_baja_directa)
+                    time.sleep(0.5)
+                    print(f"    ✓ Formulario abierto para {cedula}")
+                    self.tipo_prog = "pnfa"
+                    return True
+            except:
+                self.tipo_prog = "pnf"
+                pass
             
             # Intentar diferentes selectores para el botón del menú
             selectores_menu = [
@@ -337,7 +355,7 @@ class SigaeBot:
             # Hacer click en el botón del menú
             print("    ↻ Abriendo menú desplegable...")
             self.driver.execute_script("arguments[0].click();", boton_menu)
-            time.sleep(1.5)  # Esperar a que se abra el menú
+            time.sleep(0.5)  # Esperar a que se abra el menú
             
             # Buscar y hacer click en la opción de baja
             print("    ↻ Seleccionando opción de baja...")
@@ -350,7 +368,7 @@ class SigaeBot:
             self.driver.execute_script("arguments[0].click();", opcion_baja)
             
             # Esperar a que cargue el formulario
-            time.sleep(2.5)
+            time.sleep(0.5)
             
             print(f"    ✓ Formulario abierto para {cedula}")
             return True
@@ -362,6 +380,7 @@ class SigaeBot:
     # --- PROCESAMIENTO DE FORMULARIO ---
     def procesar_formulario_baja(self, causal_texto):
         """Completa y envía el formulario de baja con el motivo especificado."""
+
         try:
             print(f"    ✍️  Procesando formulario...")
             
@@ -374,15 +393,15 @@ class SigaeBot:
             # Completar los campos del formulario en orden
             print("    ↻ Seleccionando motivo...")
             self._seleccionar_motivo_select2(causal_texto)
-            time.sleep(0.5)  
+            time.sleep(0.25)  
             
             print("    ↻ Estableciendo fecha...")
             self._establecer_fecha_actual()
-            time.sleep(0.5)
+            time.sleep(0.25)
             
             print("    ↻ Escribiendo descripción...")
             self._escribir_descripcion(causal_texto)
-            time.sleep(0.5)
+            time.sleep(0.25)
             
             # Enviar el formulario
             print("    ↻ Enviando formulario...")
@@ -403,7 +422,7 @@ class SigaeBot:
 
                 print("    ↻ Evadiendo pop-up visual y volviendo al inicio...")
                 
-                url_lista_pnf = f"{self.URL_PRINCIPAL}/index.php?r=estudiante%2Falumno-pnf"
+                url_lista_pnf = f"{self.URL_PRINCIPAL}/index.php?r=estudiante%2Falumno-{self.tipo_prog}"
                 self.driver.get(url_lista_pnf)
 
                 return True

@@ -47,15 +47,26 @@ def generar_notificacion_baja_word(datos, plantilla_path="plantilla_bajas.docx")
             "{{NOMBRE}}": str(datos.get('NOMBRES', '')).upper(),
             "{{APELLIDO}}": str(datos.get('APELLIDO 1', '')).upper(),
             "{{CEDULA}}": str(datos.get('CÉDULA', '')),
+            
+            # Específicos de PNF
             "{{EJE}}": str(datos.get('EJE', '')).upper(),
             "{{ASIC}}": str(datos.get('ASIC', '')).upper(),
-            "{{TRAYECTO}}": texto_trayecto,
-            "{{CAUSAL}}": str(datos.get('CAUSAL', '')).upper(),
-            "{{FECHA_TRAMITE}}": limpiar_fecha_excel(datos.get('FECHA TRAMITE')),
-            "{{PNF}}": str(datos.get('PNF', '')).upper(),
+            
+            # Específicos de PNFA
+            "{{HOSPITAL}}": str(datos.get('HOSPITAL SEDE', '')).upper(),
+            
+            # Variables compartidas (Busca en PNF y si no, en PNFA)
+            "{{TRAYECTO}}": texto_trayecto, 
+            "{{CAUSAL}}": str(datos.get('CAUSAL', datos.get('MOTIVO', ''))).upper(),
+            "{{FECHA_TRAMITE}}": limpiar_fecha_excel(datos.get('FECHA TRAMITE', datos.get('FECHA SOLICITUD'))),
+            
+            # Soportar ambas etiquetas de programa
+            "{{PNF}}": str(datos.get('PNF', datos.get('PNFA', ''))).upper(),
+            "{{PNFA}}": str(datos.get('PNF', datos.get('PNFA', ''))).upper(),
+            
             "{{CABES}}": str(datos.get('CABES', '')).upper(),
             "{{ARTICULO}}": limpiar_articulo_excel(datos.get('ARTICULO')),
-            "{{FECHA_CABES}}": limpiar_fecha_excel(datos.get('FECHA')),
+            "{{FECHA_CABES}}": limpiar_fecha_excel(datos.get('FECHA', datos.get('FECHA CABES'))),
         }
         
         def reemplazar_texto_preservando_formato(parrafo):

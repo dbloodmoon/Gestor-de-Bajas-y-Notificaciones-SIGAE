@@ -98,6 +98,10 @@ class SigaeApp:
         self.plantilla_word_var = tk.StringVar(value="plantilla_bajas.docx")
         self.plantilla_bot_var = tk.StringVar(value="plantilla_bajas.docx")
         self.headless_var = tk.BooleanVar(value=False)
+        self.tipo_programa_var = tk.StringVar(value="pnf")
+
+        # --- RASTREADOR PARA CAMBIAR NOMBRE DE PLANTILLA ---
+        self.tipo_programa_var.trace_add("write", self._actualizar_nombres_plantillas)
         
         self.stop_event = threading.Event()
         self.stop_word_event = threading.Event()
@@ -191,6 +195,15 @@ class SigaeApp:
     def crear_carpetas(self):
         for c in ["Reportes", "Notificaciones"]:
             if not os.path.exists(c): os.makedirs(c)
+
+    def _actualizar_nombres_plantillas(self, *args):
+        """Cambia el texto de la plantilla por defecto según el programa seleccionado."""
+        if self.tipo_programa_var.get() == "pnfa":
+            self.plantilla_word_var.set("plantilla_bajas_pnfa.docx")
+            self.plantilla_bot_var.set("plantilla_bajas_pnfa.docx")
+        else:
+            self.plantilla_word_var.set("plantilla_bajas.docx")
+            self.plantilla_bot_var.set("plantilla_bajas.docx")
 
     def safe_messagebox(self, type, title, message=None):
         if self.is_closing: return
@@ -286,6 +299,11 @@ class SigaeApp:
         ttk.Entry(f2, textvariable=self.plantilla_word_var).pack(side='left', fill='x', expand=True)
         ttk.Button(f2, text="Examinar", command=lambda: self.sel_archivo(self.plantilla_word_var, "*.docx")).pack(side='right', padx=(5,0))
         
+        ttk.Label(lf_files, text="🎓 Tipo de Programa:").pack(anchor='w')
+        f_prog = ttk.Frame(lf_files); f_prog.pack(fill='x', pady=(0, 10))
+        ttk.Radiobutton(f_prog, text="PNF (Pregrado)", variable=self.tipo_programa_var, value="pnf").pack(side='left', padx=(0, 20))
+        ttk.Radiobutton(f_prog, text="PNFA (Postgrado)", variable=self.tipo_programa_var, value="pnfa").pack(side='left')
+
         lf_action = ttk.LabelFrame(container, text="Acciones", padding=15)
         lf_action.pack(fill='x', pady=10)
         
@@ -315,6 +333,10 @@ class SigaeApp:
         ttk.Entry(f_plb, textvariable=self.plantilla_bot_var).pack(side='left', fill='x', expand=True)
         ttk.Button(f_plb, text="Examinar", command=lambda: self.sel_archivo(self.plantilla_bot_var, "*.docx")).pack(side='right', padx=5)
 
+        ttk.Label(lf_config, text="🎓 Tipo de Programa:").pack(anchor='w')
+        f_prog = ttk.Frame(lf_config); f_prog.pack(fill='x', pady=(0, 10))
+        ttk.Radiobutton(f_prog, text="PNF (Pregrado)", variable=self.tipo_programa_var, value="pnf").pack(side='left', padx=(0, 20))
+        ttk.Radiobutton(f_prog, text="PNFA (Postgrado)", variable=self.tipo_programa_var, value="pnfa").pack(side='left')
         ttk.Checkbutton(lf_config, text="Modo Silencioso (Ocultar Navegador)", variable=self.headless_var).pack(anchor='w', pady=5)
         
         lf_control = ttk.Frame(container, padding=10)
@@ -385,15 +407,32 @@ class SigaeApp:
         archivo = self.archivo_excel_word_var.get()
         plantilla = self.plantilla_word_var.get()
         
-        if not archivo or not plantilla:
-            self.safe_messagebox("error", "Faltan archivos", "Seleccione el Excel y la Plantilla.")
+        if not os.path.exists(plantilla):
+            self.safe_messagebox("error", "Plantilla no encontrada", f"No se encontró el archivo:\n{plantilla}")
+            self.safe_ui_update(lambda: self.btn_run_word.config(state='normal'))
+            self.safe_ui_update(lambda: self.btn_stop_word.config(state='disabled'))
+            return
+
+        if not os.path.exists(archivo):
+            self.safe_messagebox("error", "Excel no encontrado", f"No se encontró el archivo:\n{archivo}")
             self.safe_ui_update(lambda: self.btn_run_word.config(state='normal'))
             self.safe_ui_update(lambda: self.btn_stop_word.config(state='disabled'))
             return
 
         try:
             print("=== INICIANDO GENERADOR WORD ===")
-            df = pd.read_excel(archivo, dtype={'CÉDULA': str})
+            tipo_prog = self.tipo_programa_var.get()
+            nombre_hoja = "BAJAS TOTALES" if tipo_prog == "pnf" else "BAJAS PNFA TOTALES"
+
+            try:
+                print(f"    📄 Leyendo hoja: {nombre_hoja}...")
+                df = pd.read_excel(archivo, sheet_name=nombre_hoja, dtype={'CÉDULA': str})
+            except Exception as e:
+                self.safe_messagebox("error", "Error leyendo Excel", f"No se encontró la pestaña '{nombre_hoja}'.")
+                self.safe_ui_update(lambda: self.btn_run_word.config(state='normal'))
+                self.safe_ui_update(lambda: self.btn_stop_word.config(state='disabled'))
+                return
+            
             df.columns = df.columns.str.strip()
             total = len(df)
             print(f"Registros encontrados: {total}")
@@ -414,8 +453,8 @@ class SigaeApp:
                     
                     datos['cedula'] = cedula
                     
-                    causal = str(datos.get('CAUSAL', ''))
-                    if causal.lower() == 'nan': causal = 'Baja'
+                    causal = str(datos.get('CAUSAL', datos.get('MOTIVO', 'Desconocido')))
+                    if causal.lower() == 'nan': causal = 'DESINCORPORACION POR MOTIVOS PERSONALES'
                     datos['causal'] = causal
                     datos['CAUSAL'] = causal
                     
@@ -463,8 +502,9 @@ class SigaeApp:
                     print(f"-> Recuperación descartada. Backup movido a {backup}")
                 except: pass
 
-        if not archivo_a_usar:
-            messagebox.showerror("Error", "Seleccione un archivo de Excel.")
+        plantilla_actual = self.plantilla_bot_var.get()
+        if plantilla_actual and not os.path.exists(plantilla_actual):
+            messagebox.showerror("Error", f"La plantilla especificada no existe en la carpeta:\n{plantilla_actual}")
             return
 
         self.btn_run_bot.config(state='disabled')
@@ -491,8 +531,13 @@ class SigaeApp:
         
         try:
             print("=== INICIANDO BOT ===")
+
+            tipo_prog = self.tipo_programa_var.get()
+            nombre_hoja = "BAJAS TOTALES" if tipo_prog == "pnf" else "BAJAS PNFA TOTALES"
+
             try:
-                df = pd.read_excel(archivo, dtype={'CÉDULA': str})
+                print(f"    📄 Leyendo hoja: {nombre_hoja}...")
+                df = pd.read_excel(archivo, sheet_name=nombre_hoja, dtype={'CÉDULA': str})
                 df.columns = df.columns.str.strip()
                 if 'CÉDULA' in df.columns:
                     df = df.dropna(subset=['CÉDULA'])
@@ -530,9 +575,9 @@ class SigaeApp:
                 nota = ""
                 
                 try:
-                    if bot.buscar_estudiante(cedula):
+                    if bot.buscar_estudiante(cedula, tipo_prog):
                         if bot.solicitar_baja_estudiante(cedula):
-                            motivo = row.get('CAUSAL', 'Desconocido')
+                            motivo = str(row.get('CAUSAL', row.get('MOTIVO', 'Desconocido')))
                             if bot.procesar_formulario_baja(motivo):
                                 exito = True
                                 nota = "Procesado correctamente"
@@ -554,7 +599,7 @@ class SigaeApp:
                                         print(f"Error Word: {ew}")
                                         nota = "Baja registrada en SIGAE, pero falló al generar el Word."
                             else:
-                                nota = "No se pudo completar el formulario (Verifique si la causal es válida)."
+                                nota = "No se pudo completar el formulario"
                         else:
                             nota = "Estudiante no encontrado. Verifique la cédula en SIGAE."
                     else:
@@ -606,7 +651,7 @@ class SigaeApp:
                 try:
                     pendientes = df[~df['CÉDULA'].isin(cedulas_procesadas)]
                     if not pendientes.empty:
-                        pendientes.to_excel(ARCHIVO_RECUPERACION, index=False)
+                        pendientes.to_excel(ARCHIVO_RECUPERACION, index=False, sheet_name=nombre_hoja)
                         print(f"⚠ Quedan {len(pendientes)} pendientes. Guardados en: {ARCHIVO_RECUPERACION}")
                         self.safe_messagebox("warning", "Proceso Incompleto", f"Se guardó '{ARCHIVO_RECUPERACION}' con los pendientes.")
                     else:
