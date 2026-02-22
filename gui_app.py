@@ -234,13 +234,24 @@ class SigaeApp:
             self.root.after(1000, self.root.destroy)
 
     def crear_interfaz(self):
+        # 1. Cabecera superior (Header)
         header_frame = tk.Frame(self.root, bg="#0078d7", height=60)
         header_frame.pack(fill='x')
         tk.Label(header_frame, text="Sistema de Automatización SIGAE", 
                  bg="#0078d7", fg="white", font=("Segoe UI", 16, "bold")).pack(pady=15)
 
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(expand=True, fill='both', padx=20, pady=15)
+        # 2. Contenedor Principal (Cuerpo dividido en 2 columnas)
+        main_container = tk.Frame(self.root, bg="#f0f0f0")
+        main_container.pack(fill='both', expand=True, padx=20, pady=15)
+        
+        # Configurar proporciones: Columna 0 (Izquierda) = 66%, Columna 1 (Derecha) = 33%
+        main_container.columnconfigure(0, weight=3)
+        main_container.columnconfigure(1, weight=1)
+        main_container.rowconfigure(0, weight=1)
+
+        # 3. Lado Izquierdo: Pestañas de Control (Notebook)
+        self.notebook = ttk.Notebook(main_container)
+        self.notebook.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
 
         self.tab_login = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_login, text=" 🔐 Acceso ")
@@ -256,14 +267,16 @@ class SigaeApp:
 
         self.notebook.tab(1, state='disabled') 
 
-        frame_console = ttk.LabelFrame(self.root, text="Registro de Eventos (Log)", padding=10)
-        frame_console.pack(fill='both', expand=False, padx=20, pady=(0, 20))
+        # 4. Lado Derecho: Consola de Registro (Log)
+        frame_console = ttk.LabelFrame(main_container, text="Registro de Eventos (Log)", padding=10)
+        frame_console.grid(row=0, column=1, sticky='nsew')
         
+        # Quitamos el parámetro 'height' para que se expanda verticalmente de forma natural
         self.console_text = scrolledtext.ScrolledText(
-            frame_console, height=12, state='disabled',
+            frame_console, state='disabled', width=50,
             bg="#1e1e1e", fg="#d4d4d4", font=("Consolas", 9), insertbackground="white"
         )
-        self.console_text.pack(fill='both')
+        self.console_text.pack(fill='both', expand=True)
 
     def _construir_login(self, parent):
         container = ttk.Frame(parent)
