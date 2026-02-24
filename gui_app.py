@@ -3,7 +3,6 @@ from tkinter import ttk, messagebox, filedialog, scrolledtext
 import sys
 import threading
 import os
-import pandas as pd
 import time
 import urllib.request
 import webbrowser
@@ -11,22 +10,60 @@ import ssl
 import json
 from packaging import version
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from seguridad import cifrar_texto, descifrar_texto
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from auditoria import AuditorSIGAE
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # --- CONSTANTES GLOBALES ---
 SIGAE_URL_GLOBAL = "http://sigae.ucs.gob.ve"
 ARCHIVO_RECUPERACION = "pendientes_recuperacion.xlsx"
 ARCHIVO_CONFIG = "config_sigae.json"
 
-from sigae_bot import SigaeBot
-from generar_notificacion import generar_notificacion_baja_word
+# Imports pesados diferidos (se cargan después del splash)
+pd = None
+webdriver = None
+Options = None
+cifrar_texto = None
+descifrar_texto = None
+Service = None
+ChromeDriverManager = None
+AuditorSIGAE = None
+plt = None
+FigureCanvasTkAgg = None
+SigaeBot = None
+generar_notificacion_baja_word = None
+
+def _importar_dependencias():
+    """Carga los módulos pesados. Se llama después de mostrar el splash."""
+    global pd, webdriver, Options, cifrar_texto, descifrar_texto
+    global Service, ChromeDriverManager, AuditorSIGAE
+    global plt, FigureCanvasTkAgg, SigaeBot, generar_notificacion_baja_word
+
+    import pandas
+    pd = pandas
+
+    from selenium import webdriver as _wd
+    webdriver = _wd
+    from selenium.webdriver.chrome.options import Options as _Opts
+    Options = _Opts
+    from selenium.webdriver.chrome.service import Service as _Svc
+    Service = _Svc
+    from webdriver_manager.chrome import ChromeDriverManager as _CDM
+    ChromeDriverManager = _CDM
+
+    from seguridad import cifrar_texto as _ct, descifrar_texto as _dt
+    cifrar_texto = _ct
+    descifrar_texto = _dt
+
+    from auditoria import AuditorSIGAE as _Aud
+    AuditorSIGAE = _Aud
+
+    import matplotlib.pyplot as _plt
+    plt = _plt
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as _FCA
+    FigureCanvasTkAgg = _FCA
+
+    from sigae_bot import SigaeBot as _SB
+    SigaeBot = _SB
+    from generar_notificacion import generar_notificacion_baja_word as _gnbw
+    generar_notificacion_baja_word = _gnbw
 
 class PrintRedirector:
     """Redirige print() al widget de texto de manera segura para hilos."""
@@ -804,7 +841,60 @@ class SigaeApp:
             self.safe_messagebox("info", "Dashboard Listo", "Gráficos y tablas generadas con éxito.")
 
 if __name__ == "__main__":
+    # ── Splash de carga (se muestra al instante) ──
+    splash = tk.Tk()
+    splash.title("Cargando...")
+    splash.overrideredirect(True)
+    splash.configure(bg="#f0f0f0")
+    sw, sh = 380, 140
+    sx = (splash.winfo_screenwidth() - sw) // 2
+    sy = (splash.winfo_screenheight() - sh) // 2
+    splash.geometry(f"{sw}x{sh}+{sx}+{sy}")
+    splash.attributes("-topmost", True)
+
+    header_sp = tk.Frame(splash, bg="#0078d7", height=45)
+    header_sp.pack(fill="x")
+    header_sp.pack_propagate(False)
+    tk.Label(header_sp, text="Gestor de Bajas y Notificaciones SIGAE",
+             bg="#0078d7", fg="white", font=("Segoe UI", 11, "bold")).pack(expand=True)
+
+    lbl_sp = tk.Label(splash, text="Cargando módulos, por favor espere...",
+                      bg="#f0f0f0", fg="#666", font=("Segoe UI", 9))
+    lbl_sp.pack(pady=(15, 8))
+
+    style_sp = ttk.Style(splash)
+    style_sp.theme_use("clam")
+    style_sp.configure("Splash.Horizontal.TProgressbar",
+                       troughcolor="#d0d0d0", background="#0078d7",
+                       bordercolor="#ccc", thickness=10)
+    pb = ttk.Progressbar(splash, mode="indeterminate",
+                         style="Splash.Horizontal.TProgressbar", length=320)
+    pb.pack(pady=(0, 10))
+    pb.start(15)
+
+    splash.update()
+
+    # Cargar dependencias pesadas en hilo separado
+    carga_ok = threading.Event()
+
+    def _cargar():
+        _importar_dependencias()
+        carga_ok.set()
+
+    threading.Thread(target=_cargar, daemon=True).start()
+
+    # Esperar a que termine, manteniendo el splash vivo
+    def _verificar_carga():
+        if carga_ok.is_set():
+            pb.stop()
+            splash.destroy()
+        else:
+            splash.after(100, _verificar_carga)
+
+    _verificar_carga()
+    splash.mainloop()
+
+    # ── Iniciar la aplicación principal ──
     root = tk.Tk()
     app = SigaeApp(root)
     root.mainloop()
-
