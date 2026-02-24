@@ -80,11 +80,11 @@ class PrintRedirector:
 class SigaeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Gestor de Bajas y Notificaciones SIGAE v1.1.0")
+        self.root.title("Gestor de Bajas y Notificaciones SIGAE v1.2.0")
         self.root.state('zoomed')
         
         # --- CONTROL DE VERSIONES ---
-        self.VERSION_ACTUAL = "1.1.0"
+        self.VERSION_ACTUAL = "1.2.0"
         self.URL_VERSION = "https://raw.githubusercontent.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/refs/heads/main/version.txt"
         self.URL_DESCARGA = "https://github.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/releases/latest"
 
@@ -807,3 +807,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = SigaeApp(root)
     root.mainloop()
+
