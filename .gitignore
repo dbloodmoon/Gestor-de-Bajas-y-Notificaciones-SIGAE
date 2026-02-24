@@ -26,3 +26,8 @@ registro_proceso.log
 
 # Llaves
 *.key
+
+# Archivos de PyInstaller
+*.spec
+build
+dist
