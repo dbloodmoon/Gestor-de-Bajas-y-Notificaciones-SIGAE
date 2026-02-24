@@ -141,16 +141,16 @@ def lanzar_aplicacion() -> None:
 # ─────────────────────────────────────────────
 
 class LauncherUI:
-    COLOR_BG       = "#1a1a2e"
-    COLOR_PANEL    = "#16213e"
-    COLOR_ACENTO   = "#0f3460"
-    COLOR_PRIMARY  = "#e94560"
-    COLOR_TEXTO    = "#eaeaea"
-    COLOR_SUBTEXTO = "#a0a0b0"
+    COLOR_BG       = "#f0f0f0"
+    COLOR_PANEL    = "#f0f0f0"
+    COLOR_HEADER   = "#0078d7"
+    COLOR_PRIMARY  = "#0078d7"
+    COLOR_TEXTO    = "#333333"
+    COLOR_SUBTEXTO = "#666666"
     FUENTE_TITULO  = ("Segoe UI", 13, "bold")
     FUENTE_ESTADO  = ("Segoe UI", 9)
     ANCHO          = 420
-    ALTO           = 180
+    ALTO           = 200
 
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -174,19 +174,21 @@ class LauncherUI:
         self.root.geometry(f"{self.ANCHO}x{self.ALTO}+{x}+{y}")
 
     def _construir_widgets(self) -> None:
-        # Panel principal con padding
-        panel = tk.Frame(self.root, bg=self.COLOR_PANEL, bd=0)
-        panel.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-
-        # Título
+        # Header azul (igual que gui_app)
+        header = tk.Frame(self.root, bg=self.COLOR_HEADER, height=50)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
         tk.Label(
-            panel,
+            header,
             text=APP_NAME,
             font=self.FUENTE_TITULO,
-            bg=self.COLOR_PANEL,
-            fg=self.COLOR_PRIMARY,
-            pady=12,
-        ).pack()
+            bg=self.COLOR_HEADER,
+            fg="white",
+        ).pack(expand=True)
+
+        # Panel principal
+        panel = tk.Frame(self.root, bg=self.COLOR_PANEL, bd=0)
+        panel.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
 
         # Estado
         self._var_estado = tk.StringVar(value="Iniciando...")
@@ -197,19 +199,19 @@ class LauncherUI:
             bg=self.COLOR_PANEL,
             fg=self.COLOR_SUBTEXTO,
         )
-        self._lbl_estado.pack(pady=(0, 8))
+        self._lbl_estado.pack(pady=(5, 8))
 
         # Barra de progreso
         style = ttk.Style()
         style.theme_use("clam")
         style.configure(
             "SIGAE.Horizontal.TProgressbar",
-            troughcolor=self.COLOR_ACENTO,
+            troughcolor="#d0d0d0",
             background=self.COLOR_PRIMARY,
-            bordercolor=self.COLOR_PANEL,
+            bordercolor="#cccccc",
             lightcolor=self.COLOR_PRIMARY,
-            darkcolor=self.COLOR_PRIMARY,
-            thickness=10,
+            darkcolor="#005a9e",
+            thickness=12,
         )
         self._progreso_var = tk.DoubleVar(value=0)
         self._barra = ttk.Progressbar(
@@ -229,8 +231,8 @@ class LauncherUI:
             textvariable=self._var_version,
             font=("Segoe UI", 7),
             bg=self.COLOR_PANEL,
-            fg=self.COLOR_ACENTO,
-        ).pack(side=tk.BOTTOM, pady=4)
+            fg="#999999",
+        ).pack(side=tk.BOTTOM, pady=2)
 
     # ── API pública (thread-safe vía after) ──
 
