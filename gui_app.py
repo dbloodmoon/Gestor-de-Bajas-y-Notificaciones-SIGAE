@@ -16,6 +16,9 @@ from selenium.webdriver.chrome.options import Options
 from seguridad import cifrar_texto, descifrar_texto
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from auditoria import AuditorSIGAE
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # --- CONSTANTES GLOBALES ---
 SIGAE_URL_GLOBAL = "http://sigae.ucs.gob.ve"
@@ -99,6 +102,7 @@ class SigaeApp:
         self.plantilla_bot_var = tk.StringVar(value="plantilla_bajas.docx")
         self.headless_var = tk.BooleanVar(value=False)
         self.tipo_programa_var = tk.StringVar(value="pnf")
+        self.archivo_auditoria_var = tk.StringVar()
 
         # --- RASTREADOR PARA CAMBIAR NOMBRE DE PLANTILLA ---
         self.tipo_programa_var.trace_add("write", self._actualizar_nombres_plantillas)
@@ -231,7 +235,12 @@ class SigaeApp:
                     self.driver.quit()
                 except:
                     pass
-            self.root.after(1000, self.root.destroy)
+            
+            def forzar_cierre():
+                self.root.destroy()
+                os._exit(0)  
+                
+            self.root.after(1000, forzar_cierre)
 
     def crear_interfaz(self):
         # 1. Cabecera superior (Header)
@@ -264,6 +273,10 @@ class SigaeApp:
         self.tab_word = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_word, text=" 📄 Generador de Bajas Word ")
         self._construir_word(self.tab_word)
+
+        self.tab_auditoria = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_auditoria, text=" 📊 Auditoría ")
+        self._construir_auditoria(self.tab_auditoria)
 
         self.notebook.tab(1, state='disabled') 
 
@@ -678,6 +691,117 @@ class SigaeApp:
 
             self.safe_ui_update(lambda: self.btn_run_bot.config(state='normal'))
             self.safe_ui_update(lambda: self.btn_stop_bot.config(state='disabled'))
+
+    def _construir_auditoria(self, parent):
+        container = ttk.Frame(parent, padding=10)
+        container.pack(fill='both', expand=True)
+
+        # 1. Selector de Archivo
+        lf_arch = ttk.LabelFrame(container, text="1. Seleccionar Reporte a Auditar", padding=10)
+        lf_arch.pack(fill='x', pady=(0, 5))
+        
+        f_arch = ttk.Frame(lf_arch); f_arch.pack(fill='x', pady=5)
+        ttk.Entry(f_arch, textvariable=self.archivo_auditoria_var).pack(side='left', fill='x', expand=True)
+        ttk.Button(f_arch, text="Examinar", command=lambda: self.sel_archivo(self.archivo_auditoria_var, "*.xlsx")).pack(side='right', padx=5)
+
+        self.btn_run_auditoria = ttk.Button(lf_arch, text="▶ GENERAR DASHBOARD", command=self.ejecutar_auditoria, style='Action.TButton')
+        self.btn_run_auditoria.pack(fill='x', pady=5)
+
+        # 2. Panel de Resultados (Sub-pestañas para Gráficos y Tablas)
+        self.notebook_audit = ttk.Notebook(container)
+        self.notebook_audit.pack(fill='both', expand=True, pady=5)
+
+        # Pestaña del Gráfico
+        self.tab_grafico = ttk.Frame(self.notebook_audit)
+        self.notebook_audit.add(self.tab_grafico, text=" 📊 Gráfico de Rendimiento ")
+
+        # Pestaña de Exitosos
+        self.tab_exitosos = ttk.Frame(self.notebook_audit)
+        self.notebook_audit.add(self.tab_exitosos, text=" ✅ Estudiantes Exitosos ")
+        self.tree_exitosos = self.crear_treeview(self.tab_exitosos)
+
+        # Pestaña de Fallidos
+        self.tab_fallidos = ttk.Frame(self.notebook_audit)
+        self.notebook_audit.add(self.tab_fallidos, text=" ❌ Estudiantes Fallidos ")
+        self.tree_fallidos = self.crear_treeview(self.tab_fallidos)
+
+    def crear_treeview(self, parent):
+        """Crea una tabla bonita para mostrar estudiantes"""
+        columnas = ('Cédula', 'Nombres', 'Nota del Sistema')
+        tree = ttk.Treeview(parent, columns=columnas, show='headings', height=6)
+        
+        tree.heading('Cédula', text='Cédula')
+        tree.heading('Nombres', text='Nombres')
+        tree.heading('Nota del Sistema', text='Nota del Sistema')
+        
+        tree.column('Cédula', width=100, anchor='center')
+        tree.column('Nombres', width=200)
+        tree.column('Nota del Sistema', width=300)
+        
+        scroll = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        
+        tree.pack(side='left', fill='both', expand=True)
+        scroll.pack(side='right', fill='y')
+        return tree
+
+    def dibujar_grafico(self, cant_exitos, cant_fallos):
+        """Dibuja un gráfico de torta en la interfaz"""
+        for widget in self.tab_grafico.winfo_children():
+            widget.destroy() # Limpia gráfico anterior
+            
+        fig, ax = plt.subplots(figsize=(4, 3), facecolor='#f0f0f0')
+        if cant_exitos == 0 and cant_fallos == 0:
+            return
+
+        etiquetas = ['Exitosos', 'Fallidos']
+        valores = [cant_exitos, cant_fallos]
+        colores = ['#28a745', '#dc3545'] # Verde y Rojo
+        
+        ax.pie(valores, labels=etiquetas, colors=colores, autopct='%1.1f%%', startangle=140, 
+               textprops={'fontsize': 10, 'weight': 'bold'})
+        ax.axis('equal') 
+        
+        canvas = FigureCanvasTkAgg(fig, master=self.tab_grafico)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill='both', expand=True)
+
+    def ejecutar_auditoria(self):
+        archivo = self.archivo_auditoria_var.get()
+        if not archivo:
+            messagebox.showerror("Error", "Debe seleccionar un reporte de la carpeta 'Reportes'.")
+            return
+
+        self.console_text.configure(state='normal')
+        self.console_text.delete(1.0, tk.END)
+        self.console_text.configure(state='disabled')
+        
+        print("=== GENERANDO DASHBOARD ANALÍTICO ===")
+        auditor = AuditorSIGAE()
+        
+        # Como es lectura de Excel rápida, no necesitamos hilo, lo hacemos directo para evitar crasheos visuales
+        exito, datos = auditor.generar_auditoria(archivo)
+        
+        if exito and datos:
+            df_exito = datos['exitosos']
+            df_fallo = datos['fallidos']
+            
+            # Poblar la tabla de Exitosos
+            self.tree_exitosos.delete(*self.tree_exitosos.get_children())
+            for _, row in df_exito.iterrows():
+                nombre = str(row.get('NOMBRES', '')) + " " + str(row.get('APELLIDOS', ''))
+                self.tree_exitosos.insert('', 'end', values=(row.get('CÉDULA', ''), nombre.strip(), row.get('NOTA_SISTEMA', '')))
+                
+            # Poblar la tabla de Fallidos
+            self.tree_fallidos.delete(*self.tree_fallidos.get_children())
+            for _, row in df_fallo.iterrows():
+                nombre = str(row.get('NOMBRES', '')) + " " + str(row.get('APELLIDOS', ''))
+                self.tree_fallidos.insert('', 'end', values=(row.get('CÉDULA', ''), nombre.strip(), row.get('NOTA_SISTEMA', '')))
+                
+            # Dibujar el gráfico!
+            self.dibujar_grafico(len(df_exito), len(df_fallo))
+            
+            self.safe_messagebox("info", "Dashboard Listo", "Gráficos y tablas generadas con éxito.")
 
 if __name__ == "__main__":
     root = tk.Tk()

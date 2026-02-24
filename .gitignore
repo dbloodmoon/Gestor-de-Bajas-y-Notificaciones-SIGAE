@@ -2,7 +2,7 @@
 Lib/
 Scripts/
 pyvenv.cfg
-bajas/
+bajas
 
 # Caché de Python
 __pycache__/
@@ -12,6 +12,7 @@ __pycache__/
 Notificaciones/
 Reportes/
 Pendientes/
+Auditorias/
 
 # Archivos de configuración
 config.py
@@ -21,3 +22,7 @@ config_sigae.json
 NOTIFICACIONES BAJAS.xlsx
 listado_estudiantes.xlsx
 pendientes_recuperacion.xlsx
+registro_proceso.log
+
+# Llaves
+*.key
