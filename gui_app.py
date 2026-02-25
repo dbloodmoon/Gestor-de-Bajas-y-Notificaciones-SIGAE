@@ -4,49 +4,36 @@ import sys
 import threading
 import os
 import time
-import urllib.request
 import webbrowser
-import ssl
 import json
-from packaging import version
 from datetime import datetime
 
-# --- CONSTANTES GLOBALES ---
-SIGAE_URL_GLOBAL = "http://sigae.ucs.gob.ve"
-ARCHIVO_RECUPERACION = "pendientes_recuperacion.xlsx"
-ARCHIVO_CONFIG = "config_sigae.json"
+from config import (
+    VERSION_ACTUAL, APP_NOMBRE, URL_VERSION, URL_DESCARGA,
+    SIGAE_URL, ARCHIVO_RECUPERACION, ARCHIVO_CONFIG, carpeta_con_fecha
+)
 
 # Imports pesados diferidos (se cargan después del splash)
-pd = None
-webdriver = None
-Options = None
 cifrar_texto = None
 descifrar_texto = None
-Service = None
-ChromeDriverManager = None
 AuditorSIGAE = None
 plt = None
 FigureCanvasTkAgg = None
-SigaeBot = None
-generar_notificacion_baja_word = None
+pd = None
+
+# Servicios (se importan después del splash)
+update_service = None
+word_service = None
+bot_service = None
 
 def _importar_dependencias():
     """Carga los módulos pesados. Se llama después de mostrar el splash."""
-    global pd, webdriver, Options, cifrar_texto, descifrar_texto
-    global Service, ChromeDriverManager, AuditorSIGAE
-    global plt, FigureCanvasTkAgg, SigaeBot, generar_notificacion_baja_word
+    global cifrar_texto, descifrar_texto, AuditorSIGAE
+    global plt, FigureCanvasTkAgg, pd
+    global update_service, word_service, bot_service
 
     import pandas
     pd = pandas
-
-    from selenium import webdriver as _wd
-    webdriver = _wd
-    from selenium.webdriver.chrome.options import Options as _Opts
-    Options = _Opts
-    from selenium.webdriver.chrome.service import Service as _Svc
-    Service = _Svc
-    from webdriver_manager.chrome import ChromeDriverManager as _CDM
-    ChromeDriverManager = _CDM
 
     from seguridad import cifrar_texto as _ct, descifrar_texto as _dt
     cifrar_texto = _ct
@@ -60,10 +47,10 @@ def _importar_dependencias():
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as _FCA
     FigureCanvasTkAgg = _FCA
 
-    from sigae_bot import SigaeBot as _SB
-    SigaeBot = _SB
-    from generar_notificacion import generar_notificacion_baja_word as _gnbw
-    generar_notificacion_baja_word = _gnbw
+    from services import update_service as _us, word_service as _ws, bot_service as _bs
+    update_service = _us
+    word_service = _ws
+    bot_service = _bs
 
 class PrintRedirector:
     """Redirige print() al widget de texto de manera segura para hilos."""
@@ -117,13 +104,8 @@ class PrintRedirector:
 class SigaeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Gestor de Bajas y Notificaciones SIGAE v1.3.0")
+        self.root.title(APP_NOMBRE)
         self.root.state('zoomed')
-        
-        # --- CONTROL DE VERSIONES ---
-        self.VERSION_ACTUAL = "1.3.0"
-        self.URL_VERSION = "https://raw.githubusercontent.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/refs/heads/main/version.txt"
-        self.URL_DESCARGA = "https://github.com/dbloodmoon/Gestor-de-Bajas-y-Notificaciones-SIGAE/releases/latest"
 
         self.is_closing = False
         self.driver = None
@@ -192,28 +174,19 @@ class SigaeApp:
         threading.Thread(target=self._thread_verificar_update).start()
 
     def _thread_verificar_update(self):
-        try:
-            contexto_ssl = ssl._create_unverified_context()
-            with urllib.request.urlopen(self.URL_VERSION, context=contexto_ssl) as response:
-                version_remota = response.read().decode('utf-8').strip()
-                
-            tupla_remota = tuple(map(int, version_remota.split('.')))
-            tupla_actual = tuple(map(int, self.VERSION_ACTUAL.split('.')))
-            
-            if tupla_remota > tupla_actual:
-                print(f"¡Actualización disponible! ({version_remota})")
-                self.safe_ui_update(lambda: self.mostrar_aviso_update(version_remota))
-            else:
-                print("El sistema está actualizado.")
-        except Exception as e:
-            print(f"No se pudo verificar actualizaciones: {e}")
+        hay_update, version_remota = update_service.verificar_actualizacion(VERSION_ACTUAL, URL_VERSION)
+        if hay_update:
+            print(f"¡Actualización disponible! ({version_remota})")
+            self.safe_ui_update(lambda: self.mostrar_aviso_update(version_remota))
+        elif version_remota:
+            print("El sistema está actualizado.")
 
     def mostrar_aviso_update(self, nueva_version):
         if messagebox.askyesno("Actualización Disponible", 
                                f"Hay una nueva versión disponible ({nueva_version}).\n"
-                               f"Tienes la versión {self.VERSION_ACTUAL}.\n\n"
+                               f"Tienes la versión {VERSION_ACTUAL}.\n\n"
                                "¿Deseas ir a la página de descarga ahora?"):
-            webbrowser.open(self.URL_DESCARGA)
+            webbrowser.open(URL_DESCARGA)
             self.on_closing() 
 
     def _configurar_estilos(self):
@@ -239,15 +212,7 @@ class SigaeApp:
 
     def _carpeta_reportes(self):
         """Devuelve la ruta Reportes/YYYY/MM - Mes/ y la crea si no existe."""
-        meses_es = {1:'Enero',2:'Febrero',3:'Marzo',4:'Abril',5:'Mayo',6:'Junio',
-                    7:'Julio',8:'Agosto',9:'Septiembre',10:'Octubre',11:'Noviembre',12:'Diciembre'}
-        ahora = datetime.now()
-        carpeta = os.path.join(
-            "Reportes", str(ahora.year),
-            f"{ahora.month:02d} - {meses_es[ahora.month]}"
-        )
-        os.makedirs(carpeta, exist_ok=True)
-        return carpeta
+        return carpeta_con_fecha("Reportes")
 
     def _actualizar_nombres_plantillas(self, *args):
         """Cambia el texto de la plantilla por defecto según el programa seleccionado."""
@@ -435,11 +400,11 @@ class SigaeApp:
     def _thread_login(self):
         driver_login = None
         try:
-            ops = Options(); ops.add_argument("--headless")
-            servicio = Service(ChromeDriverManager().install())
-            driver_login = webdriver.Chrome(service=servicio, options=ops)
-            driver_login.get(SIGAE_URL_GLOBAL)
-            bot = SigaeBot(driver_login)
+            ops = bot_service.Options(); ops.add_argument("--headless")
+            servicio = bot_service.Service(bot_service.ChromeDriverManager().install())
+            driver_login = bot_service.webdriver.Chrome(service=servicio, options=ops)
+            driver_login.get(SIGAE_URL)
+            bot = bot_service.SigaeBot(driver_login)
             if bot.login(self.usuario_var.get(), self.clave_var.get()):
                 self.safe_ui_update(self.login_exitoso)
             else:
@@ -479,77 +444,18 @@ class SigaeApp:
             print("\n!!! DETENIENDO GENERACIÓN WORD... !!!\n")
 
     def _thread_word(self):
-        archivo = self.archivo_excel_word_var.get()
-        plantilla = self.plantilla_word_var.get()
-        
-        if not os.path.exists(plantilla):
-            self.safe_messagebox("error", "Plantilla no encontrada", f"No se encontró el archivo:\n{plantilla}")
-            self.safe_ui_update(lambda: self.btn_run_word.config(state='normal'))
-            self.safe_ui_update(lambda: self.btn_stop_word.config(state='disabled'))
-            return
-
-        if not os.path.exists(archivo):
-            self.safe_messagebox("error", "Excel no encontrado", f"No se encontró el archivo:\n{archivo}")
-            self.safe_ui_update(lambda: self.btn_run_word.config(state='normal'))
-            self.safe_ui_update(lambda: self.btn_stop_word.config(state='disabled'))
-            return
-
+        callbacks = {
+            'messagebox': self.safe_messagebox,
+            'ui_update': self.safe_ui_update,
+        }
         try:
-            print("=== INICIANDO GENERADOR WORD ===")
-            tipo_prog = self.tipo_programa_var.get()
-            nombre_hoja = "BAJAS TOTALES" if tipo_prog == "pnf" else "BAJAS PNFA TOTALES"
-
-            try:
-                print(f"    📄 Leyendo hoja: {nombre_hoja}...")
-                df = pd.read_excel(archivo, sheet_name=nombre_hoja, dtype={'CÉDULA': str})
-            except Exception as e:
-                self.safe_messagebox("error", "Error leyendo Excel", f"No se encontró la pestaña '{nombre_hoja}'.")
-                self.safe_ui_update(lambda: self.btn_run_word.config(state='normal'))
-                self.safe_ui_update(lambda: self.btn_stop_word.config(state='disabled'))
-                return
-            
-            df.columns = df.columns.str.strip()
-            total = len(df)
-            print(f"Registros encontrados: {total}")
-            
-            cont_ok = 0
-            
-            for i, row in df.iterrows():
-                if self.stop_word_event.is_set():
-                    print(f"--- PROCESO INTERRUMPIDO POR USUARIO EN REGISTRO {i} ---")
-                    break
-                
-                try:
-                    datos = row.to_dict()
-                    cedula = str(datos.get('CÉDULA', 'SN'))
-                    
-                    if cedula.endswith('.0'):
-                        cedula = cedula[:-2]
-                    
-                    datos['cedula'] = cedula
-                    
-                    causal = str(datos.get('CAUSAL', datos.get('MOTIVO', 'Desconocido')))
-                    if causal.lower() == 'nan': causal = 'DESINCORPORACION POR MOTIVOS PERSONALES'
-                    datos['causal'] = causal
-                    datos['CAUSAL'] = causal
-                    
-                    print(f"[{i+1}/{total}] Generando doc para: {cedula}...")
-                    generar_notificacion_baja_word(datos, plantilla)
-                    cont_ok += 1
-                    time.sleep(0.05) 
-                    
-                except Exception as e_row:
-                    print(f"Error en fila {i}: {e_row}")
-
-            if not self.stop_word_event.is_set():
-                self.safe_messagebox("info", "Proceso terminado", f"Se generaron {cont_ok} documentos.")
-                print(f"✓ Finalizado. {cont_ok} documentos creados.")
-            else:
-                self.safe_messagebox("warning", "Detenido", f"Proceso detenido. Se generaron {cont_ok} documentos.")
-
-        except Exception as e:
-            self.safe_messagebox("error", f"Error general: {e}")
-            print(f"Error crítico: {e}")
+            word_service.generar_words_desde_excel(
+                archivo=self.archivo_excel_word_var.get(),
+                plantilla=self.plantilla_word_var.get(),
+                tipo_programa=self.tipo_programa_var.get(),
+                stop_event=self.stop_word_event,
+                callbacks=callbacks,
+            )
         finally:
             self.safe_ui_update(lambda: self.btn_run_word.config(state='normal'))
             self.safe_ui_update(lambda: self.btn_stop_word.config(state='disabled'))
@@ -600,144 +506,26 @@ class SigaeApp:
             print("\n!!! DETENIENDO PROCESO... Por favor espere a que termine la tarea actual !!!\n")
 
     def _thread_bot(self, archivo, plantilla, headless, es_recuperacion):
-        self.driver = None
-        resultados = []
-        cedulas_procesadas = [] 
-        
+        def set_driver(d):
+            self.driver = d
+
+        callbacks = {
+            'messagebox': self.safe_messagebox,
+            'set_driver': set_driver,
+        }
         try:
-            print("=== INICIANDO BOT ===")
-
-            tipo_prog = self.tipo_programa_var.get()
-            nombre_hoja = "BAJAS TOTALES" if tipo_prog == "pnf" else "BAJAS PNFA TOTALES"
-
-            try:
-                print(f"    📄 Leyendo hoja: {nombre_hoja}...")
-                df = pd.read_excel(archivo, sheet_name=nombre_hoja, dtype={'CÉDULA': str})
-                df.columns = df.columns.str.strip()
-                if 'CÉDULA' in df.columns:
-                    df = df.dropna(subset=['CÉDULA'])
-                    df['CÉDULA'] = df['CÉDULA'].astype(str).str.strip()
-                    df = df.drop_duplicates(subset=['CÉDULA'])
-            except Exception as e:
-                self.safe_messagebox("error", f"Error leyendo Excel: {e}")
-                return
-
-            total = len(df)
-            print(f"Total registros a procesar: {total}")
-
-            ops = Options()
-            ops.add_argument("--start-maximized")
-            if headless: ops.add_argument("--headless")
-            
-            servicio = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=servicio, options=ops)
-            bot = SigaeBot(self.driver)
-            
-            self.driver.get(SIGAE_URL_GLOBAL)
-            if not bot.login(self.usuario_var.get(), self.clave_var.get()):
-                print("Error de Login. Abortando.")
-                return
-
-            for i, row in df.iterrows():
-                if self.stop_event.is_set():
-                    print("--- PROCESO DETENIDO ---")
-                    break
-                
-                cedula = str(row.get('CÉDULA', 'SN'))
-                print(f"\n[{i+1}/{total}] Procesando: {cedula}")
-                
-                exito = False
-                nota = ""
-                
-                try:
-                    if bot.buscar_estudiante(cedula, tipo_prog):
-                        if bot.solicitar_baja_estudiante(cedula):
-                            motivo = str(row.get('CAUSAL', row.get('MOTIVO', 'Desconocido')))
-                            if bot.procesar_formulario_baja(motivo):
-                                exito = True
-                                nota = "Procesado correctamente"
-                                if plantilla and os.path.exists(plantilla):
-                                    try:
-                                        d_word = row.to_dict()
-                                        cedula_limpia = cedula
-                                        if cedula_limpia.endswith('.0'):
-                                            cedula_limpia = cedula_limpia[:-2]
-                                            
-                                        d_word['cedula'] = cedula_limpia
-                                        d_word['fecha'] = str(row.get('FECHA', '')).strip()
-                                        
-                                        d_word['causal'] = motivo
-                                        d_word['CAUSAL'] = motivo
-                                        
-                                        generar_notificacion_baja_word(d_word, plantilla)
-                                    except Exception as ew:
-                                        print(f"Error Word: {ew}")
-                                        nota = "Baja registrada en SIGAE, pero falló al generar el Word."
-                            else:
-                                nota = "No se pudo completar el formulario"
-                        else:
-                            nota = "Estudiante no encontrado. Verifique la cédula en SIGAE."
-                    else:
-                        nota = "Estudiante no encontrado. Verifique la cédula en SIGAE."
-                except Exception as e_proc:
-                    nota = f"Error Critico: {str(e_proc)[:50]}"
-                    print(nota)
-                    
-                resultado_fila = row.to_dict()
-                
-                for columna, valor in resultado_fila.items():
-                    if pd.notna(valor):
-                        if isinstance(valor, (datetime, pd.Timestamp)):
-                            resultado_fila[columna] = valor.strftime("%d/%m/%Y")
-                        elif str(valor).endswith(" 00:00:00"):
-                            resultado_fila[columna] = str(valor).replace(" 00:00:00", "")
-
-                resultado_fila.update({
-                    "ESTADO_BOT": "EXITO" if exito else "FALLO", 
-                    "NOTA_SISTEMA": nota,
-                    "FECHA_PROCESO": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                })
-
-                resultados.append(resultado_fila)
-                cedulas_procesadas.append(cedula)
-                time.sleep(1)
-
-        except Exception as e:
-            if "invalid session id" not in str(e).lower() and "chrome not reachable" not in str(e).lower():
-                print(f"\nERROR GENERAL DEL HILO: {e}")
-                self.safe_messagebox("error", f"Error fatal: {e}")
-        
+            bot_service.ejecutar_proceso_bot(
+                archivo=archivo,
+                plantilla=plantilla,
+                headless=headless,
+                es_recuperacion=es_recuperacion,
+                usuario=self.usuario_var.get(),
+                clave=self.clave_var.get(),
+                tipo_programa=self.tipo_programa_var.get(),
+                stop_event=self.stop_event,
+                callbacks=callbacks,
+            )
         finally:
-            print("\n=== FINALIZANDO Y GUARDANDO ===")
-            if self.driver: 
-                try: self.driver.quit()
-                except: pass
-                self.driver = None 
-
-            if resultados:
-                try:
-                    rep_name = os.path.join(self._carpeta_reportes(), f"resultado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-                    pd.DataFrame(resultados).to_excel(rep_name, index=False)
-                    print(f"✓ Reporte de sesión guardado: {rep_name}")
-                except Exception as e:
-                    print(f"Error guardando reporte final: {e}")
-
-            if 'df' in locals():
-                try:
-                    pendientes = df[~df['CÉDULA'].isin(cedulas_procesadas)]
-                    if not pendientes.empty:
-                        pendientes.to_excel(ARCHIVO_RECUPERACION, index=False, sheet_name=nombre_hoja)
-                        print(f"⚠ Quedan {len(pendientes)} pendientes. Guardados en: {ARCHIVO_RECUPERACION}")
-                        self.safe_messagebox("warning", "Proceso Incompleto", f"Se guardó '{ARCHIVO_RECUPERACION}' con los pendientes.")
-                    else:
-                        if os.path.exists(ARCHIVO_RECUPERACION):
-                            try: os.remove(ARCHIVO_RECUPERACION)
-                            except: pass
-                            print("✓ Proceso completado totalmente. Archivo de recuperación limpiado.")
-                        self.safe_messagebox("info", "Finalizado", "Proceso completado con éxito.")
-                except Exception as e:
-                    print(f"Error gestionando archivo recuperación: {e}")
-
             self.safe_ui_update(lambda: self.btn_run_bot.config(state='normal'))
             self.safe_ui_update(lambda: self.btn_stop_bot.config(state='disabled'))
 
