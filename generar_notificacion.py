@@ -126,15 +126,8 @@ def generar_notificacion_baja_word(datos, plantilla_path="plantilla_bajas.docx")
         # --- FIN SECCIÓN MODIFICADA ---
 
         # Organizar por año/mes
-        meses_es = {1:'Enero',2:'Febrero',3:'Marzo',4:'Abril',5:'Mayo',6:'Junio',
-                    7:'Julio',8:'Agosto',9:'Septiembre',10:'Octubre',11:'Noviembre',12:'Diciembre'}
-        ahora = datetime.now()
-        carpeta_fecha = os.path.join(
-            "Notificaciones",
-            str(ahora.year),
-            f"{ahora.month:02d} - {meses_es[ahora.month]}"
-        )
-        os.makedirs(carpeta_fecha, exist_ok=True)
+        from config import carpeta_con_fecha
+        carpeta_fecha = carpeta_con_fecha("Notificaciones")
             
         ruta_salida = os.path.join(carpeta_fecha, nombre_salida)
         doc.save(ruta_salida)
