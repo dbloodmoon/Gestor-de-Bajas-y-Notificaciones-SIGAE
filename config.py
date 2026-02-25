@@ -1,9 +1,13 @@
 """Configuración centralizada del proyecto SIGAE."""
 import os
+import sys
 from datetime import datetime
 
+# --- Ruta base (compatible con PyInstaller y ejecución normal) ---
+_BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+
 # --- Versión (se lee de version.txt para tener una sola fuente de verdad) ---
-with open(os.path.join(os.path.dirname(__file__), "version.txt"), "r") as _f:
+with open(os.path.join(_BASE_DIR, "version.txt"), "r") as _f:
     VERSION_ACTUAL = _f.read().strip()
 APP_NOMBRE = f"Gestor de Bajas y Notificaciones SIGAE v{VERSION_ACTUAL}"
 
