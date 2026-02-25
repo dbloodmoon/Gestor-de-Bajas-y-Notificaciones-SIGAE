@@ -1,13 +1,11 @@
 import pandas as pd
 import os
 from datetime import datetime
+from config import carpeta_con_fecha
 
 class AuditorSIGAE:
     def __init__(self):
-        # 1. Nueva carpeta exclusiva para organización
-        self.carpeta_salida = "Auditorias"
-        if not os.path.exists(self.carpeta_salida):
-            os.makedirs(self.carpeta_salida)
+        self.carpeta_base = "Auditorias"
 
     def generar_auditoria(self, archivo_reporte):
         if not archivo_reporte or not os.path.exists(archivo_reporte):
@@ -36,17 +34,27 @@ class AuditorSIGAE:
                 resumen_errores = fallidos['NOTA_SISTEMA'].value_counts().reset_index()
                 resumen_errores.columns = ['Motivo del Fallo', 'Cantidad']
 
-            # --- 2. GENERACIÓN DEL NOMBRE DE SALIDA ---
+            # --- 2. GENERACIÓN DEL NOMBRE DE SALIDA (organizado por fecha) ---
             nombre_base = nombre_origen.replace("resultado_", "Auditoria_")
             if not nombre_base.startswith("Auditoria_"):
                 nombre_base = f"Auditoria_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             
-            ruta_salida = os.path.join(self.carpeta_salida, nombre_base)
+            carpeta_salida = carpeta_con_fecha(self.carpeta_base)
+            ruta_salida = os.path.join(carpeta_salida, nombre_base)
             
-            # --- 3. CREACIÓN DEL EXCEL ENRIQUECIDO ---
+            # --- 3. COLUMNAS PARA LISTADOS (incluye APELLIDO 1 y PNF/PNFA) ---
+            # Detectar si el reporte tiene PNF o PNFA
+            col_pnf = 'PNF' if 'PNF' in df.columns else ('PNFA' if 'PNFA' in df.columns else None)
+            cols_listado = ['CÉDULA', 'NOMBRES', 'APELLIDO 1']
+            if col_pnf:
+                cols_listado.append(col_pnf)
+            cols_listado.append('NOTA_SISTEMA')
+            cols_listado = [c for c in cols_listado if c in df.columns]
+
+            # --- 4. CREACIÓN DEL EXCEL ENRIQUECIDO ---
             with pd.ExcelWriter(ruta_salida, engine='openpyxl') as writer:
                 
-                # Pestaña 1: Resumen General (Ahora con muchos más datos)
+                # Pestaña 1: Resumen General
                 pd.DataFrame({
                     'Métrica de Auditoría': [
                         'Documento Origen',
@@ -66,21 +74,21 @@ class AuditorSIGAE:
                     ]
                 }).to_excel(writer, sheet_name='Resumen General', index=False)
 
-                # Pestaña 2: Listado de Exitosos (Para el archivo de la secretaría)
+                # Pestaña 2: Listado de Exitosos
                 if not exitosos.empty:
-                    cols_exito = [c for c in ['CÉDULA', 'NOMBRES', 'APELLIDOS', 'NOTA_SISTEMA'] if c in exitosos.columns]
+                    cols_exito = [c for c in cols_listado if c in exitosos.columns]
                     exitosos[cols_exito].to_excel(writer, sheet_name='Procesados con Éxito', index=False)
 
-                # Pestaña 3: Listado de Fallos (Para revisión manual)
+                # Pestaña 3: Listado de Fallos
                 if not fallidos.empty:
-                    cols_fallo = [c for c in ['CÉDULA', 'NOMBRES', 'APELLIDOS', 'NOTA_SISTEMA'] if c in fallidos.columns]
+                    cols_fallo = [c for c in cols_listado if c in fallidos.columns]
                     fallidos[cols_fallo].to_excel(writer, sheet_name='Requieren Revisión', index=False)
                 
                 # Pestaña 4: Agrupación de errores
                 if not resumen_errores.empty:
                     resumen_errores.to_excel(writer, sheet_name='Desglose Errores', index=False)
 
-            print(f"💾 Auditoría exportada en carpeta: {self.carpeta_salida}")
+            print(f"💾 Auditoría exportada en: {carpeta_salida}")
             
             datos = {'exitosos': exitosos, 'fallidos': fallidos}
             return True, datos

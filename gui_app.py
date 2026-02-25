@@ -564,16 +564,18 @@ class SigaeApp:
 
     def crear_treeview(self, parent):
         """Crea una tabla bonita para mostrar estudiantes"""
-        columnas = ('Cédula', 'Nombres', 'Nota del Sistema')
+        columnas = ('Cédula', 'Nombre Completo', 'PNF', 'Nota del Sistema')
         tree = ttk.Treeview(parent, columns=columnas, show='headings', height=6)
         
         tree.heading('Cédula', text='Cédula')
-        tree.heading('Nombres', text='Nombres')
+        tree.heading('Nombre Completo', text='Nombre Completo')
+        tree.heading('PNF', text='PNF')
         tree.heading('Nota del Sistema', text='Nota del Sistema')
         
-        tree.column('Cédula', width=100, anchor='center')
-        tree.column('Nombres', width=200)
-        tree.column('Nota del Sistema', width=300)
+        tree.column('Cédula', width=90, anchor='center')
+        tree.column('Nombre Completo', width=200)
+        tree.column('PNF', width=100, anchor='center')
+        tree.column('Nota del Sistema', width=250)
         
         scroll = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scroll.set)
@@ -591,7 +593,7 @@ class SigaeApp:
         if cant_exitos == 0 and cant_fallos == 0:
             return
 
-        etiquetas = ['Exitosos', 'Fallidos']
+        etiquetas = [f'Exitosos: {cant_exitos}', f'Fallidos: {cant_fallos}']
         valores = [cant_exitos, cant_fallos]
         colores = ['#28a745', '#dc3545'] # Verde y Rojo
         
@@ -616,24 +618,30 @@ class SigaeApp:
         print("=== GENERANDO DASHBOARD ANALÍTICO ===")
         auditor = AuditorSIGAE()
         
-        # Como es lectura de Excel rápida, no necesitamos hilo, lo hacemos directo para evitar crasheos visuales
         exito, datos = auditor.generar_auditoria(archivo)
         
         if exito and datos:
             df_exito = datos['exitosos']
             df_fallo = datos['fallidos']
             
+            # Detectar columna PNF o PNFA
+            col_pnf = 'PNF' if 'PNF' in df_exito.columns else ('PNFA' if 'PNFA' in df_exito.columns else None)
+            
             # Poblar la tabla de Exitosos
             self.tree_exitosos.delete(*self.tree_exitosos.get_children())
             for _, row in df_exito.iterrows():
-                nombre = str(row.get('NOMBRES', '')) + " " + str(row.get('APELLIDOS', ''))
-                self.tree_exitosos.insert('', 'end', values=(row.get('CÉDULA', ''), nombre.strip(), row.get('NOTA_SISTEMA', '')))
+                nombre = str(row.get('NOMBRES', '')) + " " + str(row.get('APELLIDO 1', ''))
+                pnf = str(row.get(col_pnf, '')) if col_pnf else ''
+                if pnf == 'nan': pnf = ''
+                self.tree_exitosos.insert('', 'end', values=(row.get('CÉDULA', ''), nombre.strip(), pnf, row.get('NOTA_SISTEMA', '')))
                 
             # Poblar la tabla de Fallidos
             self.tree_fallidos.delete(*self.tree_fallidos.get_children())
             for _, row in df_fallo.iterrows():
-                nombre = str(row.get('NOMBRES', '')) + " " + str(row.get('APELLIDOS', ''))
-                self.tree_fallidos.insert('', 'end', values=(row.get('CÉDULA', ''), nombre.strip(), row.get('NOTA_SISTEMA', '')))
+                nombre = str(row.get('NOMBRES', '')) + " " + str(row.get('APELLIDO 1', ''))
+                pnf = str(row.get(col_pnf, '')) if col_pnf else ''
+                if pnf == 'nan': pnf = ''
+                self.tree_fallidos.insert('', 'end', values=(row.get('CÉDULA', ''), nombre.strip(), pnf, row.get('NOTA_SISTEMA', '')))
                 
             # Dibujar el gráfico!
             self.dibujar_grafico(len(df_exito), len(df_fallo))
