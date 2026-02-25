@@ -237,6 +237,18 @@ class SigaeApp:
         for c in ["Reportes", "Notificaciones"]:
             if not os.path.exists(c): os.makedirs(c)
 
+    def _carpeta_reportes(self):
+        """Devuelve la ruta Reportes/YYYY/MM - Mes/ y la crea si no existe."""
+        meses_es = {1:'Enero',2:'Febrero',3:'Marzo',4:'Abril',5:'Mayo',6:'Junio',
+                    7:'Julio',8:'Agosto',9:'Septiembre',10:'Octubre',11:'Noviembre',12:'Diciembre'}
+        ahora = datetime.now()
+        carpeta = os.path.join(
+            "Reportes", str(ahora.year),
+            f"{ahora.month:02d} - {meses_es[ahora.month]}"
+        )
+        os.makedirs(carpeta, exist_ok=True)
+        return carpeta
+
     def _actualizar_nombres_plantillas(self, *args):
         """Cambia el texto de la plantilla por defecto según el programa seleccionado."""
         if self.tipo_programa_var.get() == "pnfa":
@@ -560,7 +572,7 @@ class SigaeApp:
                 print(f"-> Usando archivo de recuperación: {archivo_a_usar}")
             else:
                 try:
-                    backup = f"Reportes/backup_descartado_{datetime.now().strftime('%M%S')}.xlsx"
+                    backup = os.path.join(self._carpeta_reportes(), f"backup_descartado_{datetime.now().strftime('%M%S')}.xlsx")
                     os.rename(ARCHIVO_RECUPERACION, backup)
                     print(f"-> Recuperación descartada. Backup movido a {backup}")
                 except: pass
@@ -704,7 +716,7 @@ class SigaeApp:
 
             if resultados:
                 try:
-                    rep_name = f"Reportes/resultado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                    rep_name = os.path.join(self._carpeta_reportes(), f"resultado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
                     pd.DataFrame(resultados).to_excel(rep_name, index=False)
                     print(f"✓ Reporte de sesión guardado: {rep_name}")
                 except Exception as e:
