@@ -2,8 +2,9 @@
 import os
 from datetime import datetime
 
-# --- Versión ---
-VERSION_ACTUAL = "1.3.0"
+# --- Versión (se lee de version.txt para tener una sola fuente de verdad) ---
+with open(os.path.join(os.path.dirname(__file__), "version.txt"), "r") as _f:
+    VERSION_ACTUAL = _f.read().strip()
 APP_NOMBRE = f"Gestor de Bajas y Notificaciones SIGAE v{VERSION_ACTUAL}"
 
 # --- URLs ---
